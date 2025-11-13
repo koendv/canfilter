@@ -1,0 +1,224 @@
+# canfilter.yaml - Complete Project Specification
+# SPDX-License-Identifier: CC0-1.0
+metadata:
+  name: "canfilter"
+  version: "1.2"
+  author: "Koen De Vleeschauwer"
+  license: "CC0-1.0"
+  status: "Production Ready"
+  repository: "https://github.com/koendv/canfilter"
+  last_updated: "2025-11-11"
+
+algorithm:
+  name: "CIDR Route Aggregation for CAN Filters"
+  description: |
+    Applies CIDR (Classless Inter-Domain Routing) network aggregation algorithms
+    to CAN bus filter generation:
+    
+    - Single CAN IDs treated as host routes (/32 equivalent)
+    - CAN ID ranges decomposed into optimal CIDR blocks
+    - CIDR aggregation minimizes filter count
+    - Hardware optimization selects mask vs list mode based on efficiency
+
+  mapping:
+    network_concept: "CIDR block"
+    can_equivalent: "Hardware filter"
+    host_route: "Single CAN ID (exact match)"
+    cidr_aggregation: "Filter count minimization"
+
+  optimization_rules:
+    list_mode_eligibility:
+      standard_id: "Mask = 0x7FF (all 11 bits set)"
+      extended_id: "Mask = 0x1FFFFFFF (all 29 bits set)"
+    decision: "Per (mode × frame_type) group: all full masks → list mode, else mask mode"
+
+  steps:
+    - "CIDR aggregation: convert input ranges to optimal CIDR blocks"
+    - "Filter grouping by (mode × frame_type) combinations"
+    - "Hardware optimization: apply list mode where efficient"
+    - "Bank assignment: pack filters into hardware banks"
+
+  key_insight: |
+    CAN hardware filters (ID + mask) are mathematically equivalent to 
+    CIDR network blocks (network + prefix), allowing direct application
+    of proven IP routing aggregation techniques.
+
+  implementation:
+    method: "Iterative CIDR aggregation (no recursion for embedded safety)"
+    decomposition: "Power-of-2 block finding for range coverage"
+    aggregation: "Adjacent filter combination with mask expansion"
+    sorting: "Insertion sort for deterministic memory usage"
+
+  verified_examples:
+    - "0x100 → ID=0x100, MASK=0x7FF (host route equivalent)"
+    - "0x200-0x20F → ID=0x200, MASK=0x7F0 (CIDR block /28 equivalent)"
+    - "0x100-0x1FF → ID=0x100, MASK=0x700 (CIDR block /24 equivalent)"
+
+platforms:
+  desktop:
+    limits:
+      filters: 64
+      test_ids: 256  
+      ranges: 128
+    max_default: 64
+    compilation: "gcc -std=c11 -Os -o canfilter canfilter.c"
+
+  embedded:
+    limits:
+      filters: 14
+      test_ids: 16
+      ranges: 8
+    max_default: 14
+    requirements:
+      stack_size: "2.0 kB recommended (enhanced SLCAN output)"
+      memory: "Static allocation only"
+      integration: "RT-Thread MSH command"
+      hardware_banks: "14 typical (STM32 family)"
+
+implementation:
+  core_functions:
+    - "canfilter_generate_filters(): Main CIDR aggregation engine"
+    - "canfilter_output_slcan(): Complete hardware programming output"
+    - "range_to_filters(): CIDR block decomposition"
+    - "aggregate_filters(): CIDR route aggregation"
+    - "insertion_sort_filters(): Deterministic sorting"
+
+  bank_assignment:
+    strategy: "Sequential bank assignment with hardware optimization"
+    capacity:
+      "32BIT_MASK": "1 filter per bank"
+      "32BIT_LIST": "2 filters per bank (extended IDs)" 
+      "16BIT_MASK": "2 filters per bank"
+      "16BIT_LIST": "4 filters per bank (standard IDs)"
+
+  slcan_implementation:
+    protocol:
+      control_commands:
+        - "FA: Pass all frames (disable filtering)"
+        - "FB: Block all frames (enable filtering, allow nothing)"
+        - "F0: Begin filter configuration (synchronization)"
+        - "F1: End filter configuration and apply"
+      filter_command: "F<bank><fr1><fr2><mode><scale><ide><rtr>"
+      format: "21-character complete hardware programming"
+      fields:
+        bank: "2 hex digits - Filter bank number (00-27)"
+        fr1: "8 hex digits - FR1 register value"
+        fr2: "8 hex digits - FR2 register value"
+        mode: "1 hex digit - 0=MASK, 1=LIST"
+        scale: "1 hex digit - 0=16BIT, 1=32BIT"
+        ide: "1 hex digit - 0=standard, 1=extended"
+        rtr: "1 hex digit - 0=data, 1=remote"
+    advantages:
+      - "Single command complete hardware programming"
+      - "No calculations required on target device"
+      - "Transaction safety with F0/F1 synchronization"
+      - "Quick control with FA/FB commands"
+      - "Fixed length for easy parsing"
+      - "Direct hardware register mapping"
+
+  safety_features:
+    - "CHECK_BOUNDS macros for array bounds checking"
+    - "SAFE_RETURN for embedded crash prevention"
+    - "Input validation for all user parameters"
+    - "Hardware limit enforcement"
+    - "Truncation warnings when filter limits exceeded"
+
+  key_data_structures:
+    - "can_range_t: {start, end, mode, frame_type}"
+    - "can_filter_t: {id, mask, mode, frame_type} (CIDR block equivalent)"
+    - "config_t: Output format and filter limits"
+
+output_formats:
+  stm32:
+    description: "Human-readable hardware register format"
+    format: "ID=0x100 MASK=0x7F0 IDE=0 RTR=0 MODE=16BIT SCALE=32BIT FILTER=MASK"
+    extended: "Includes MODE=(MASK|LIST) and SCALE=(16BIT|32BIT)"
+    
+  slcan:
+    description: "Enhanced SLCAN protocol with complete hardware programming"
+    protocol_flow:
+      - "F0: Begin configuration transaction"
+      - "F<bank><fr1><fr2><mode><scale><ide><rtr>: Complete filter programming"
+      - "F1: Apply configuration atomically"
+      - "FA/FB: Quick enable/disable without full reconfiguration"
+    hardware_mapping:
+      "16BIT_LIST": "4 standard IDs per bank"
+      "32BIT_LIST": "2 extended IDs per bank"
+      "16BIT_MASK": "2 filters per bank"
+      "32BIT_MASK": "1 filter per bank"
+
+  hal:
+    description: "STM32 HAL library code for direct integration"
+    features: "Complete HAL configuration structures with initialization code"
+
+  embedded: "Direct hardware application (RT-Thread)"
+
+cli_options:
+  filter_definition:
+    - "--std: 11-bit standard IDs (default)"
+    - "--ext: 29-bit extended IDs"
+    - "--data: Filter data frames only (default)"
+    - "--rtr: Filter remote frames only"
+  output_control:
+    - "--output FORMAT: stm, slcan, hal, embedded"
+    - "--mask: Force mask mode for all filters"
+    - "--list: Enable list mode optimization (default)"
+    - "--max N: Maximum number of filters (platform dependent)"
+    - "--verbose: Verbose output showing algorithm details"
+  testing:
+    - "--test ID...: Test specific IDs against filters"
+    - "--selftest: Run built-in self-test"
+  information:
+    - "--help: Show help message"
+
+testing:
+  methodology: "Comprehensive CIDR algorithm and hardware optimization verification"
+  test_categories:
+    - "Single ID host route matching"
+    - "Range to CIDR block decomposition"
+    - "CIDR route aggregation correctness"
+    - "Mask vs list mode selection"
+    - "Bank assignment and packing"
+    - "Mixed standard/extended ID modes"
+    - "Data vs RTR frame separation"
+    - "Hardware register value generation"
+
+  self_test_coverage:
+    test_cases: 6
+    scenarios: 
+      - "Single ID data frames (host routes)"
+      - "Single ID RTR frames (host routes)" 
+      - "Range coverage (CIDR block decomposition)"
+      - "Mixed standard/extended (separate routing tables)"
+      - "Mixed data/RTR (separate route types)"
+      - "Complex multi-range (CIDR aggregation stress test)"
+
+documentation:
+  files:
+    - "canfilter.c: CIDR aggregation implementation"
+    - "canfilter.h: Embedded library header"
+    - "canfilter.md: Man page (user documentation)"
+    - "canfilter.yaml: This specification"
+    - "README.md: GitHub documentation"
+
+development_notes:
+  achievements:
+    - "CIDR route aggregation applied to CAN hardware"
+    - "Single-command complete hardware programming"
+    - "Hardware-aware mask/list optimization"
+    - "Zero dynamic memory allocation"
+    - "Hardware-verified algorithm correctness"
+    - "Cross-platform compatibility"
+    - "Commercial deployment ready"
+
+  key_insights:
+    - "CAN hardware filters = CIDR network blocks"
+    - "Route aggregation minimizes hardware filter usage"
+    - "Single-command approach simplifies target implementation"
+    - "Transaction synchronization prevents partial configurations"
+
+  historical_context: |
+    Algorithm inspired by CIDR route aggregation techniques from the BGP3 to BGP4
+    transition era, applied to modern embedded CAN bus systems.
+
+quote: "From internet backbone routing to CAN bus filtering - CIDR aggregation endures! 🎯"
