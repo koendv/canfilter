@@ -14,6 +14,13 @@
 extern "C" {
 #endif
 
+/* Return code definitions */
+#define CANFILTER_SUCCESS      0
+#define CANFILTER_ERROR        1
+#define CANFILTER_USAGE_ERROR  2
+#define CANFILTER_HW_ERROR     3
+#define CANFILTER_TEST_FAILED  4
+
 /* Core data structures */
 typedef enum {
     MODE_STD = 0,
@@ -86,7 +93,7 @@ int canfilter_test_filters(const can_filter_t* filters, int filter_count,
 /**
  * @brief Run comprehensive self-test to verify algorithm correctness
  *
- * @return int 0 if all tests pass, non-zero on failure
+ * @return int CANFILTER_SUCCESS if all tests pass, CANFILTER_TEST_FAILED on failure
  */
 int canfilter_run_selftest(void);
 
@@ -125,7 +132,7 @@ void canfilter_output_hal(const can_filter_t* filters, int count, int use_list_o
  * @param filters Array of filters to apply
  * @param filter_count Number of filters in array
  * @param device_name CAN device name (e.g., "can1")
- * @return int 0 on success, non-zero on error
+ * @return int CANFILTER_SUCCESS on success, CANFILTER_HW_ERROR on error
  */
 int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, const char* device_name);
 #endif
@@ -135,7 +142,7 @@ int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, c
  *
  * @param argc Argument count
  * @param argv Argument vector
- * @return int 0 on success, non-zero on error
+ * @return int CANFILTER_SUCCESS on success, error code on failure
  */
 int canfilter_cmd(int argc, char* argv[]);
 

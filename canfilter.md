@@ -14,9 +14,26 @@
 
 ## DESCRIPTION
 
-**canfilter** is a sophisticated tool for generating optimal hardware filters for CAN bus controllers. It takes human-readable ID ranges and converts them into efficient hardware filter configurations using CIDR route aggregation algorithms.
+**canfilter** is a sophisticated tool for generating optimal hardware filters for CAN bus controllers. It takes human-readable ID ranges and converts them into efficient hardware filter configurations using CIDR route aggregation algorithms with subset elimination.
 
 The tool supports both standard (11-bit) and extended (29-bit) CAN identifiers and generates filters in multiple output formats including STM32-compatible register values, SLCAN protocol commands, HAL library code, and direct hardware configuration.
+
+## ALGORITHM
+
+**canfilter** uses CIDR (Classless Inter-Domain Routing) route aggregation algorithms adapted for CAN bus filters:
+
+- **Single CAN IDs** treated as host routes (/32 equivalent)
+- **CAN ID ranges** decomposed into optimal CIDR blocks  
+- **CIDR aggregation** merges adjacent blocks to minimize filter count
+- **Subset elimination** removes any filter completely covered by a broader filter
+- **Hardware optimization** selects mask vs list mode based on efficiency
+
+### Subset Elimination
+
+The algorithm automatically eliminates redundant filters:
+- Single IDs covered by ranges (e.g., `0x100` + `0x100-0x1FF` → single filter)
+- Smaller ranges covered by larger ranges (e.g., `0x100-0x10F` + `0x100-0x1FF` → single filter)
+- Any filter completely covered by a broader filter with the same mode and frame type
 
 ## OPTIONS
 
@@ -86,13 +103,15 @@ Filters all IDs from 0x100 to 0x10F inclusive
 `0x100 0x200-0x20F 0x300`  
 Filters multiple individual IDs and ranges
 
+*Note: Overlapping ranges are automatically optimized through subset elimination*
+
 ## OUTPUT FORMATS
 
 ### STM32 Format
 
 Outputs filters in STM32 hardware register format:
 
-```text
+```
 ID=0x100 MASK=0x7F0 IDE=0 RTR=0 MODE=16BIT SCALE=32BIT FILTER=MASK
 ```
 
@@ -125,17 +144,16 @@ Outputs enhanced SLCAN protocol commands with complete hardware programming:
 
 #### Control Commands
 
-```text
+```
 FA # Pass all frames (disable filtering)
 FB # Block all frames (enable filtering, allow nothing)
 F0 # Begin filter configuration (synchronization)
 F1 # End filter configuration and apply
 ```
 
-
 #### Single Complete Filter Programming Command
 
-```text
+```
 F<bank><fr1><fr2><mode><scale><ide><rtr>
 ```
 
@@ -158,16 +176,16 @@ F<bank><fr1><fr2><mode><scale><ide><rtr>
 - **Mask Mode**: 1-2 filters per bank
 
 **Protocol Flow:**
-```text
-F0 # Begin configuration
-F000000001000000007FF01000 # Bank 0: complete filter setup
-F010000002000000007F0001000 # Bank 1: complete filter setup
-F1 # Apply to hardware
+
+```
+F0 # Begin filter.
+F0020000000E00000000100 # Bank 0 filter
+F0160000000E00000000100 # Bank 1 filter
+F1 # Apply to hardware.
 ```
 
-
 **Target Implementation:**
-```c
+```
 /* Simple target device implementation */
 void handle_filter_command(const char* cmd) {
     uint8_t bank, mode, scale, ide, rtr;
@@ -187,129 +205,143 @@ void handle_filter_command(const char* cmd) {
     if (scale == 1) CAN1->FS1R |= (1 << bank);
     else CAN1->FS1R &= ~(1 << bank);
 }
+```
 
-HAL Format
+### HAL Format
 
 Outputs STM32 HAL library configuration code for direct integration.
-Embedded Format
+
+### Embedded Format
 
 Directly applies filters to CAN hardware (RT-Thread only).
-TESTING AND VERIFICATION
 
-canfilter includes comprehensive testing capabilities:
+## TESTING AND VERIFICATION
 
-    Built-in self-test (--selftest) verifies algorithm correctness
+**canfilter** includes comprehensive testing capabilities:
 
-    User testing (--test) validates specific IDs against generated filters
+- **Built-in self-test** (`--selftest`) verifies algorithm correctness including subset elimination
+- **User testing** (`--test`) validates specific IDs against generated filters  
+- **Test results** show pass/fail counts: X/Y passed
+- **Automatic boundary condition testing**
 
-    Test results show pass/fail counts: X/Y passed
+## EXAMPLES
 
-    Automatic boundary condition testing
-
-EXAMPLES
-
-Basic single ID filter
+**Basic single ID filter**
+```
 canfilter 0x100
+```
 
-Range with optimal masking
+**Range with optimal masking**
+```
 canfilter 0x100-0x1FF
+```
 
-Extended ID filtering
+**Subset elimination example** - single ID covered by range
+```
+canfilter 0x100 0x100-0x1FF
+# Output: Single optimal filter covering both
+```
+
+**Nested range elimination** - smaller range covered by larger
+```
+canfilter 0x100-0x10F 0x100-0x1FF  
+# Output: Single optimal filter covering both
+```
+
+**Extended ID filtering**
+```
 canfilter --ext 0x1ABCDE 0x1ABCDF-0x1ABCE0
+```
 
-Apply filters directly to hardware (RT-Thread)
+**Apply filters directly to hardware (RT-Thread)**
+```
 canfilter --output embedded --std 0x100-0x10F
+```
 
-Realistic automotive filter for powertrain and instrumentation
+**Realistic automotive filter for powertrain and instrumentation**
+```
 canfilter --std 0x100-0x1FF 0x300-0x3FF
+```
 
-Generate HAL library code
+**Generate HAL library code**
+```
 canfilter --output hal --std 0x100-0x10F
+```
 
-Generate SLCAN commands for hardware programming
+**Generate SLCAN commands for hardware programming**
+```
 canfilter --output slcan --std 0x100 0x200-0x20F
-DEVELOPER INFORMATION
+```
+
+## DEVELOPER INFORMATION
 
 This section contains technical details for developers and integrators.
-Algorithm Implementation
+
+### Algorithm Implementation
 
 Uses CIDR (Classless Inter-Domain Routing) route aggregation algorithms adapted for CAN bus filters:
 
-    Single CAN IDs treated as host routes (/32 equivalent)
+- **Single CAN IDs** treated as host routes (/32 equivalent)
+- **CAN ID ranges** decomposed into optimal CIDR blocks
+- **CIDR aggregation** minimizes filter count
+- **Subset elimination** removes any filter completely covered by a broader filter
+- **Hardware optimization** selects mask vs list mode
 
-    CAN ID ranges decomposed into optimal CIDR blocks
+### Hardware Optimization
 
-    CIDR aggregation minimizes filter count
+**canfilter** optimizes filter implementation based on hardware capabilities:
 
-    Hardware optimization selects mask vs list mode
+- **List mode** for host routes (exact matches)
+- **Mask mode** for CIDR blocks (range coverage)
+- **Automatic bank assignment** and packing
+- **Hardware-aware filter grouping** by (IDE × RTR) combinations
 
-Hardware Optimization
-
-canfilter optimizes filter implementation based on hardware capabilities:
-
-    List mode for host routes (exact matches)
-
-    Mask mode for CIDR blocks (range coverage)
-
-    Automatic bank assignment and packing
-
-    Hardware-aware filter grouping by (IDE × RTR) combinations
-
-SLCAN Protocol Enhancement
+### SLCAN Protocol Enhancement
 
 The enhanced SLCAN protocol provides:
 
-    Single Command: Complete hardware programming in 21 characters
+- **Single Command**: Complete hardware programming in 21 characters
+- **No Calculations**: Target device just copies values to registers  
+- **Transaction Safety**: F0/F1 prevent partial configurations
+- **Quick Control**: FA/FB for instant enable/disable
+- **Hardware Direct**: 1:1 mapping to hardware registers
 
-    No Calculations: Target device just copies values to registers
+### Platform Specifications
 
-    Transaction Safety: F0/F1 prevent partial configurations
-
-    Quick Control: FA/FB for instant enable/disable
-
-    Hardware Direct: 1:1 mapping to hardware registers
-
-Platform Specifications
-
-Linux/Windows
+**Linux/Windows**
 Filter design and verification tool
 
-RT-Thread
+**RT-Thread**
 Embedded deployment with hardware integration
-Embedded System Requirements
+
+### Embedded System Requirements
 
 On RT-Thread systems:
 
-    Static memory allocation only
+- Static memory allocation only
+- Conservative limits: 14 filters, 16 test IDs, 8 ranges
+- Available as shell command: canfilter
+- Direct hardware filter application
+- Recommended stack size: 2.0 kB (enhanced SLCAN output)
 
-    Conservative limits: 14 filters, 16 test IDs, 8 ranges
-
-    Available as shell command: canfilter
-
-    Direct hardware filter application
-
-    Recommended stack size: 2.0 kB (enhanced SLCAN output)
-
-Bug Reporting Procedure
+## BUG REPORTING PROCEDURE
 
 If you find a bug:
 
-    Reproduce with --verbose and --selftest
+1. Reproduce with `--verbose` and `--selftest`
+2. Test with different output formats
+3. Use AI tools for initial analysis
+4. Open GitHub issue with complete information
 
-    Test with different output formats
-
-    Use AI tools for initial analysis
-
-    Open GitHub issue with complete information
-
-AUTHOR
+## AUTHOR
 
 Koen De Vleeschauwer
-COPYRIGHT
+
+## COPYRIGHT
 
 This project (including all software, hardware designs, documentation, and other creative content) is dedicated to the public domain under the Creative Commons Zero ([CC0](https://creativecommons.org/publicdomain/zero/1.0/)) 1.0 Universal Public Domain Dedication.
 
-## What this means
+### What this means
 
 - Use this project for **any purpose**, personal or commercial
 - Modify, adapt, and build upon the work
@@ -319,7 +351,6 @@ This project (including all software, hardware designs, documentation, and other
   - Use the same license
 - No permission is needed - **just use it!**
 
-## No Warranty
+### No Warranty
 
 This project is provided **"as is"** without any warranties. The authors accept no liability for any damages resulting from its use.
-

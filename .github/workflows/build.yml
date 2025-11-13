@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get install -y gcc mingw-w64 groff
+        run: sudo apt-get install -y build-essential gcc mingw-w64 pandoc groff weasyprint
       - name: Build Linux binary + PDF
         run: make package
       - name: Upload artifacts
@@ -50,9 +50,7 @@ jobs:
             Includes:
             - Linux binary (canfilter)
             - Windows binary (canfilter.exe) 
-            - Man page (canfilter.1)
-            - Documentation PDF (canfilter.pdf)
-            - README.md
+            - Documentation
             - LICENSE (CC0 1.0 Public Domain)
             
             Usage: `canfilter --std 0x100-0x10F`

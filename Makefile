@@ -35,7 +35,7 @@ man: $(DOC_SRC)
 
 # Generate PDF from markdown
 pdf: $(DOC_SRC)
-	 pandoc $(DOC_SRC) -o $(DOC_PDF) -V geometry:a4paper -V geometry:margin=2cm -V fontsize=11pt
+	 pandoc $(DOC_SRC) -o $(DOC_PDF) --pdf-engine=weasyprint
 
 # Clean all generated files
 clean:
@@ -52,4 +52,4 @@ test: linux
 
 # Update package creation in build.yml
 package: all
-	zip -r9 canfilter.zip $(TARGET) $(TARGET).exe $(DOC_MAN) $(DOC_PDF) README.md $(LICENSE)
+	zip -r9 canfilter.zip $(TARGET) $(TARGET).exe $(DOC_SRC) $(DOC_MAN) $(DOC_PDF) README.md $(LICENSE)

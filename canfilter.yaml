@@ -18,6 +18,7 @@ algorithm:
     - Single CAN IDs treated as host routes (/32 equivalent)
     - CAN ID ranges decomposed into optimal CIDR blocks
     - CIDR aggregation minimizes filter count
+    - Subset elimination removes any filter completely covered by a broader filter
     - Hardware optimization selects mask vs list mode based on efficiency
 
   mapping:
@@ -25,6 +26,7 @@ algorithm:
     can_equivalent: "Hardware filter"
     host_route: "Single CAN ID (exact match)"
     cidr_aggregation: "Filter count minimization"
+    subset_elimination: "Remove any filter completely covered by a broader filter"
 
   optimization_rules:
     list_mode_eligibility:
@@ -33,7 +35,9 @@ algorithm:
     decision: "Per (mode × frame_type) group: all full masks → list mode, else mask mode"
 
   steps:
-    - "CIDR aggregation: convert input ranges to optimal CIDR blocks"
+    - "CIDR decomposition: convert input ranges to optimal CIDR blocks"
+    - "CIDR aggregation: merge adjacent CIDR blocks"
+    - "Subset elimination: remove any filter covered by a broader filter"
     - "Filter grouping by (mode × frame_type) combinations"
     - "Hardware optimization: apply list mode where efficient"
     - "Bank assignment: pack filters into hardware banks"
@@ -41,16 +45,19 @@ algorithm:
   key_insight: |
     CAN hardware filters (ID + mask) are mathematically equivalent to 
     CIDR network blocks (network + prefix), allowing direct application
-    of proven IP routing aggregation techniques.
+    of proven IP routing aggregation techniques including subset elimination.
 
   implementation:
-    method: "Iterative CIDR aggregation (no recursion for embedded safety)"
+    method: "Iterative CIDR aggregation with subset elimination"
     decomposition: "Power-of-2 block finding for range coverage"
     aggregation: "Adjacent filter combination with mask expansion"
+    subset_elimination: "Remove filters completely covered by broader filters"
     sorting: "Insertion sort for deterministic memory usage"
 
   verified_examples:
     - "0x100 → ID=0x100, MASK=0x7FF (host route equivalent)"
+    - "0x100 0x100-0x1FF → ID=0x100, MASK=0x700 (host route eliminated)"
+    - "0x100-0x10F 0x100-0x1FF → ID=0x100, MASK=0x700 (nested network eliminated)"
     - "0x200-0x20F → ID=0x200, MASK=0x7F0 (CIDR block /28 equivalent)"
     - "0x100-0x1FF → ID=0x100, MASK=0x700 (CIDR block /24 equivalent)"
 
@@ -81,6 +88,7 @@ implementation:
     - "canfilter_output_slcan(): Complete hardware programming output"
     - "range_to_filters(): CIDR block decomposition"
     - "aggregate_filters(): CIDR route aggregation"
+    - "remove_subset_filters(): Eliminate redundant filters"
     - "insertion_sort_filters(): Deterministic sorting"
 
   bank_assignment:
@@ -177,6 +185,7 @@ testing:
     - "Single ID host route matching"
     - "Range to CIDR block decomposition"
     - "CIDR route aggregation correctness"
+    - "Subset elimination verification"
     - "Mask vs list mode selection"
     - "Bank assignment and packing"
     - "Mixed standard/extended ID modes"
@@ -192,6 +201,7 @@ testing:
       - "Mixed standard/extended (separate routing tables)"
       - "Mixed data/RTR (separate route types)"
       - "Complex multi-range (CIDR aggregation stress test)"
+      - "Subset elimination (any filter covered by broader filter)"
 
 documentation:
   files:
@@ -204,6 +214,7 @@ documentation:
 development_notes:
   achievements:
     - "CIDR route aggregation applied to CAN hardware"
+    - "Subset elimination for optimal filter reduction"
     - "Single-command complete hardware programming"
     - "Hardware-aware mask/list optimization"
     - "Zero dynamic memory allocation"
@@ -214,6 +225,7 @@ development_notes:
   key_insights:
     - "CAN hardware filters = CIDR network blocks"
     - "Route aggregation minimizes hardware filter usage"
+    - "Subset elimination removes redundant specific routes"
     - "Single-command approach simplifies target implementation"
     - "Transaction synchronization prevents partial configurations"
 

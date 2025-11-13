@@ -56,15 +56,11 @@
 #define CHECK_BOUNDS(index, max) do { \
     if ((index) < 0 || (index) >= (max)) { \
         printf("Error: Buffer overflow at %s:%d\n", __FILE__, __LINE__); \
-        return 0; \
+        return CANFILTER_ERROR; \
     } \
 } while(0)
-
-/* Always return 0 on RT-Thread to avoid crash dumps */
-#define SAFE_RETURN(code) do { return 0; } while(0)
 #else
 #define CHECK_BOUNDS(index, max) ((void)0)
-#define SAFE_RETURN(code) do { return (code); } while(0)
 #endif
 
 /* ============================================================================
@@ -76,12 +72,12 @@ int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, c
     rt_device_t can_dev = rt_device_find(device_name);
     if (!can_dev) {
         printf("Error: CAN device '%s' not found\n", device_name);
-        return -1;
+        return CANFILTER_HW_ERROR;
     }
 
     if (filter_count > MAX_CAN_HW_FILTER) {
         printf("Error: %d filters exceed hardware limit of %d\n", filter_count, MAX_CAN_HW_FILTER);
-        return -1;
+        return CANFILTER_HW_ERROR;
     }
 
     struct rt_can_filter_item items[MAX_CAN_HW_FILTER];
@@ -89,11 +85,18 @@ int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, c
 
     for (int i = 0; i < filter_count; i++) {
         uint32_t id_limit = (filters[i].mode == MODE_EXT) ? 0x1FFFFFFF : 0x7FF;
+
+        /* Direct use - CIDR mask format matches STM32 mask format */
+        items[i].mask = filters[i].mask & id_limit;
+
         items[i].id = filters[i].id;
         items[i].ide = (filters[i].mode == MODE_EXT) ? 1 : 0;
         items[i].rtr = (filters[i].frame_type == FRAME_RTR) ? 1 : 0;
-        items[i].mode = 0;  // Always mask mode
-        items[i].mask = ~filters[i].mask & id_limit;  // Convert to STM32 format
+
+        /* Use hardware-optimized mode selection */
+        uint32_t full_mask = (filters[i].mode == MODE_STD) ? 0x7FF : 0x1FFFFFFF;
+        items[i].mode = (filters[i].mask == full_mask) ? 1 : 0;  /* 1=list, 0=mask */
+
         items[i].hdr_bank = -1;  // Auto-assign hardware banks
     }
 
@@ -102,10 +105,10 @@ int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, c
 
     if (res == RT_EOK) {
         printf("Successfully applied %d filters to CAN hardware\n", filter_count);
-        return 0;
+        return CANFILTER_SUCCESS;
     } else {
         printf("Failed to apply filters: %d\n", (int)res);
-        return -1;
+        return CANFILTER_HW_ERROR;
     }
 }
 #else
@@ -113,7 +116,7 @@ int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, c
 int canfilter_apply_to_hardware(const can_filter_t* filters, int filter_count, const char* device_name) {
     (void)filters; (void)filter_count; (void)device_name;
     printf("Error: Hardware integration only available on RT-Thread\n");
-    return -1;
+    return CANFILTER_HW_ERROR;
 }
 #endif
 
@@ -205,26 +208,30 @@ static int range_to_filters(const can_range_t* range, can_filter_t* filters, int
     uint32_t max_mask = (1UL << bits) - 1;
 
     while (current <= end && count < max_filters) {
-        uint32_t mask = max_mask;
-        int shift = 0;
+        /* Start with largest possible block and reduce until it fits */
+        int shift = 0; /* Largest block */
 
-        /* Find largest power-of-2 block starting at current */
         while (shift < bits) {
-            uint32_t candidate_mask = (mask << shift) & max_mask;
-            uint32_t base = current & candidate_mask;
-            uint32_t block_end = base | (~candidate_mask & max_mask);
+            uint32_t block_mask = (max_mask << shift) & max_mask;
+            uint32_t base = current & block_mask; /* Aligned base */
+            uint32_t block_end = base | (~block_mask & max_mask);
 
+            /* Check if block fits entirely within range and starts at or after current */
             if (base >= current && block_end <= end) {
+                /* This block works, try even larger block */
                 shift++;
             } else {
+                /* Block is too large, use previous size */
+                shift--;
                 break;
             }
         }
 
-        shift--;
+        /* Handle edge cases */
         if (shift < 0) shift = 0;
+        if (shift >= bits) shift = bits - 1;
 
-        uint32_t final_mask = (mask << shift) & max_mask;
+        uint32_t final_mask = (max_mask << shift) & max_mask;
         uint32_t base = current & final_mask;
 
         filters[count].id = base;
@@ -233,16 +240,46 @@ static int range_to_filters(const can_range_t* range, can_filter_t* filters, int
         filters[count].frame_type = range->frame_type;
         count++;
 
-        current = base + (1UL << shift);
-        if (current <= base) break;
+        /* Move to next address after this block */
+        uint32_t block_end = base | (~final_mask & max_mask);
+        current = block_end + 1;
+        if (current <= block_end) break; /* Overflow protection */
     }
 
     return count;
 }
 
+/* Remove filters that are completely covered by other filters */
+static void remove_subset_filters(can_filter_t* filters, int* count) {
+    for (int i = 0; i < *count; i++) {
+        for (int j = 0; j < *count; j++) {
+            if (i == j) continue;
+
+            /* Check if filter[i] is completely covered by filter[j] */
+            if (filters[i].mode == filters[j].mode &&
+                filters[i].frame_type == filters[j].frame_type &&
+                (filters[i].mask & filters[j].mask) == filters[j].mask &&
+                (filters[i].id & filters[j].mask) == (filters[j].id & filters[j].mask)) {
+                /* Remove the subset filter */
+                for (int k = i; k < *count - 1; k++) {
+                    filters[k] = filters[k + 1];
+                }
+                (*count)--;
+                i--; /* Restart check for this position */
+                break;
+            }
+        }
+    }
+}
+
 /* Check if two filters can be aggregated */
 static int can_aggregate(const can_filter_t* a, const can_filter_t* b) {
     if (a->mode != b->mode || a->frame_type != b->frame_type) {
+        return 0;
+    }
+
+    /* Only aggregate filters with the same mask size */
+    if (a->mask != b->mask) {
         return 0;
     }
 
@@ -312,6 +349,9 @@ int canfilter_generate_filters(can_range_t* ranges, int range_count, can_filter_
             }
         }
     } while (changed && temp_count > 1);
+
+    /* Remove subset filters (like single ID covered by range) */
+    remove_subset_filters(temp_filters, &temp_count);
 
     /* Copy to output with truncation warning */
     int output_count = (temp_count > max_filters) ? max_filters : temp_count;
@@ -491,10 +531,10 @@ int canfilter_run_selftest(void) {
 
     if (passed == total) {
         printf("All self-tests passed!\n");
-        return 0;
+        return CANFILTER_SUCCESS;
     } else {
         printf("Some self-tests failed!\n");
-        return -1;
+        return CANFILTER_TEST_FAILED;
     }
 }
 
@@ -676,6 +716,34 @@ static void print_usage(const char* progname) {
 #endif
 }
 
+/* RT-Thread wrapper that always returns 0 to prevent crash dumps */
+#ifdef USE_RTTHREAD
+static int canfilter_wrapper(int argc, char* argv[]) {
+    int result = canfilter_cmd(argc, argv);
+
+    /* Print terse error message on failure */
+    if (result != CANFILTER_SUCCESS) {
+        switch (result) {
+            case CANFILTER_ERROR:
+                printf("error\n");
+                break;
+            case CANFILTER_USAGE_ERROR:
+                printf("usage error\n");
+                break;
+            case CANFILTER_HW_ERROR:
+                printf("hw error\n");
+                break;
+            case CANFILTER_TEST_FAILED:
+                printf("test failed\n");
+                break;
+        }
+    }
+
+    /* Always return 0 to RT-Thread shell */
+    return 0;
+}
+#endif
+
 /* Main command function - compatible with both desktop and RT-Thread */
 int canfilter_cmd(int argc, char* argv[]) {
     can_range_t ranges[MAX_RANGES];
@@ -709,14 +777,14 @@ int canfilter_cmd(int argc, char* argv[]) {
             if (strcmp(argv[i], "--s") == 0 || strcmp(argv[i], "--e") == 0 || strcmp(argv[i], "--st") == 0) {
                 fprintf(stderr, "Error: Ambiguous option '%s'\n", argv[i]);
                 fprintf(stderr, "Use more characters to disambiguate\n");
-                SAFE_RETURN(1);
+                return CANFILTER_USAGE_ERROR;
             }
             /* Handle short options */
             else if (strcmp(argv[i], "-v") == 0) {
                 config.verbose = 1;
             } else if (strcmp(argv[i], "-h") == 0) {
                 print_usage(argv[0]);
-                return 0;
+                return CANFILTER_SUCCESS;
             }
             /* Handle long options with proper abbreviation support */
             else if (strncmp(argv[i], "--output", strlen(argv[i])) == 0) {
@@ -728,7 +796,7 @@ int canfilter_cmd(int argc, char* argv[]) {
                     else {
                         fprintf(stderr, "Error: Unknown output format: %s\n", argv[i]);
                         fprintf(stderr, "Valid formats: stm, slcan, hal, embedded\n");
-                        SAFE_RETURN(1);
+                        return CANFILTER_USAGE_ERROR;
                     }
                 }
             } else if (strncmp(argv[i], "--std", strlen(argv[i])) == 0) {
@@ -748,7 +816,7 @@ int canfilter_cmd(int argc, char* argv[]) {
                     config.max_filters = atoi(argv[i]);
                     if (config.max_filters <= 0 || config.max_filters > MAX_FILTERS) {
                         fprintf(stderr, "Error: Invalid max filters value (1-%d)\n", MAX_FILTERS);
-                        SAFE_RETURN(1);
+                        return CANFILTER_USAGE_ERROR;
                     }
                 }
             } else if (strncmp(argv[i], "--test", strlen(argv[i])) == 0) {
@@ -771,10 +839,10 @@ int canfilter_cmd(int argc, char* argv[]) {
                 config.verbose = 1;
             } else if (strncmp(argv[i], "--help", strlen(argv[i])) == 0) {
                 print_usage(argv[0]);
-                return 0;
+                return CANFILTER_SUCCESS;
             } else {
                 fprintf(stderr, "Error: Unknown option: %s\n", argv[i]);
-                SAFE_RETURN(1);
+                return CANFILTER_USAGE_ERROR;
             }
         } else if (range_count < MAX_RANGES) {
             /* Parse range */
@@ -787,14 +855,14 @@ int canfilter_cmd(int argc, char* argv[]) {
     /* Run self-test if requested */
     if (config.selftest_mode) {
         int result = canfilter_run_selftest();
-        return result == 0 ? 0 : 0; /* Always return 0 on RT-Thread */
+        return result; /* Return actual test result */
     }
 
     /* Check for valid input */
     if (range_count == 0) {
         fprintf(stderr, "Error: No ranges specified\n");
         print_usage(argv[0]);
-        SAFE_RETURN(1);
+        return CANFILTER_USAGE_ERROR;
     }
 
     /* Generate filters */
@@ -802,7 +870,7 @@ int canfilter_cmd(int argc, char* argv[]) {
 
     if (filter_count <= 0) {
         printf("No filters generated\n");
-        return 0;
+        return CANFILTER_ERROR;
     }
 
     /* ADD HARDWARE LIMIT CHECK FOR EMBEDDED MODE */
@@ -811,7 +879,7 @@ int canfilter_cmd(int argc, char* argv[]) {
         if (filter_count > MAX_CAN_HW_FILTER) {
             printf("Error: %d filters exceed hardware limit of %d\n", filter_count, MAX_CAN_HW_FILTER);
             printf("Filters not applied to hardware. Use --max %d or reduce filter ranges.\n", MAX_CAN_HW_FILTER);
-            SAFE_RETURN(1);
+            return CANFILTER_HW_ERROR;
         }
 #endif
     }
@@ -829,12 +897,12 @@ int canfilter_cmd(int argc, char* argv[]) {
             break;
         case OUTPUT_EMBEDDED:
 #ifdef USE_RTTHREAD
-            if (canfilter_apply_to_hardware(filters, filter_count, "can1") != 0) {
-                SAFE_RETURN(1);
+            if (canfilter_apply_to_hardware(filters, filter_count, "can1") != CANFILTER_SUCCESS) {
+                return CANFILTER_HW_ERROR;
             }
 #else
             fprintf(stderr, "Error: embedded output only available on RT-Thread\n");
-            SAFE_RETURN(1);
+            return CANFILTER_HW_ERROR;
 #endif
             break;
     }
@@ -852,7 +920,7 @@ int canfilter_cmd(int argc, char* argv[]) {
         printf("Test summary: %d/%d passed\n", passed, test_count);
     }
 
-    return 0;
+    return CANFILTER_SUCCESS;
 }
 
 /* ============================================================================
@@ -871,7 +939,7 @@ int canfilter_cmd(int argc, char* argv[]) {
  * - Safety margin: ~200 bytes
  * TOTAL: ~2000 bytes
  */
-MSH_CMD_EXPORT_ALIAS(canfilter_cmd, canfilter, CAN bus hardware filter generator);
+MSH_CMD_EXPORT_ALIAS(canfilter_wrapper, canfilter, CAN bus hardware filter generator);
 #else
 /* Desktop main function */
 int main(int argc, char **argv) {

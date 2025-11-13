@@ -5,7 +5,46 @@ The tool runs on Windows, linux and embedded, in the usb to CAN adapter itself.
 
 _canfilter_ takes human-readable ID ranges and converts them into efficient hardware filter configurations.
 
-The tool has been written by [deepseek](https://deepseek.com) AI.
+## AI
+
+I would like to comment on the use of AI in software.
+
+The _canfilter_ tool was developed with assistance from [deepseek](https://deepseek.com) AI.
+
+The key insight behind the _canfilter_ tool is that CANBUS hardware filters (ID + mask) are mathematically equivalent to IP network blocks (network + prefix).
+
+This means IP networking code can be applied to CANBUS. [CIDR aggregation](https://github.com/koendv/canfilter/tree/main/cidr) is a mature IP networking algorithm to group IP addresses and address ranges into a minimal list of IP networks. Applied to CANBUS, the CIDR aggregation algorithm rewrites a list of CANBUS addresses and address ranges into a minimal list of hardware filters. Minimizing the number of hardware filters is useful, because hardware resources cost.
+
+Usually an idea stays just that, an idea. AI enables rapid prototyping, transforming an idea into working code. I consider this project a 'proof of concept' that demonstrates the algorithm's practical application.
+
+For production industrial use, I would recommend code optimized by hand, using the YAML file as reference.
+
+## Command Options
+
+_canfilter_ is a command line tool with the following options:
+
+```text
+Generate optimal CAN bus hardware filters using CIDR route aggregation
+
+Filter Definition Options:
+  --std          Use 11-bit standard IDs (default)
+  --ext          Use 29-bit extended IDs
+  --data         Filter data frames only (default)
+  --rtr          Filter remote frames only
+
+Output Control Options:
+  --output FORMAT  Output format: stm, slcan, hal, embedded
+  --mask          Force mask mode for all filters
+  --list          Enable list mode optimization (default)
+  --max N         Maximum number of filters (default: platform dependent)
+  --verbose       Verbose output showing algorithm details
+
+Testing and Verification Options:
+  --test ID...    Test specific IDs against generated filters
+  --selftest      Run built-in self-test
+```
+
+The [man page](canfilter.md) explains each option in detail; a concise overview follows.
 
 ## Desktop example
 
@@ -33,7 +72,7 @@ Successfully applied 2 filters to CAN hardware
 ## Testing
 
 Selftest and test options allow pre-production testing.
-Please test before use. 
+Please test before use.
 
 Self-test verifies algorithm correctness against known good results:
 ```
@@ -55,6 +94,7 @@ Test summary: 1/1 passed
 ```
 
 These commands run in both desktop and embedded.
+_canfilter_ is also available as C library.
 
 ## Output format
 
@@ -63,9 +103,9 @@ Output format is
 - STM registers
 - HAL C source
 - SLCAN
-- applying to CAN controller hardware (embedded only).
+- setting CAN controller hardware filters directly (embedded only).
 
-The SLCAN format is an SLCAN filter extension.
+The SLCAN format is an [SLCAN filter extension](canfilter.md#slcan-format).
 
 ## Algorithm
 
@@ -74,6 +114,7 @@ The algorithm used is CIDR aggregation, an IP networking algorithm.
 - Single CAN IDs treated as host routes (/32 equivalent)
 - CAN ID ranges decomposed into optimal CIDR blocks
 - CIDR aggregation produces minimal filter count
+- Subset elimition removes nested networks (any filter completely covered by a broader filter)
 - CIDR output is divided into host routes and networks.
     - Host routes with a netmask of all 1's correspond to CAN bus filter lists.
     - Networks correspond to CAN bus filter masks
@@ -104,7 +145,7 @@ canfilter --output hal [your ranges]
         - canfilter.c (source code)
         - canfilter.yaml (specification)
         - canfilter.md (man page)
-        
+
 - Provide:
     - The exact command that shows the bug
     - The verbose output from step 1
@@ -113,7 +154,7 @@ canfilter --output hal [your ranges]
 - If DeepSeek Cannot Solve It
 
     Open a GitHub issue with:
-    
+
     - All the information from above
     - Your DeepSeek conversation summary
     - Any potential fixes you identified
@@ -137,7 +178,7 @@ Verbose output: [paste here]
 Can you help identify the issue in the CIDR aggregation?
 ```
 
-    Note deepseek is able to answer questions like:
+Note deepseek is able to answer questions like:
 
 ```text
 Please estimate stack size on arm32.
