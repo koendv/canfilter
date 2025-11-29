@@ -1,0 +1,60 @@
+name: Build CANFilter
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: build canfilter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get install -y build-essential gcc mingw-w64 libusb-1.0-0-dev pandoc groff weasyprint
+      - name: Build Linux binary + PDF
+        run: make package
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: canfilter
+          path: canfilter.zip
+          retention-days: 1
+
+  release:
+    name: release canfilter
+    runs-on: ubuntu-22.04
+    needs: build
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: canfilter
+          path: artifacts
+
+      - name: Display package contents
+        run: |
+          echo "Package contents:"
+          unzip -l artifacts/canfilter.zip
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts/canfilter.zip"
+          body: |
+            CAN Bus Hardware Filter Generator
+            
+            Includes:
+            - Linux binary (canfilter)
+            - Windows binary (canfilter.exe) 
+            - Documentation
+            - LICENSE (CC0 1.0 Public Domain)
+            
+            Usage: `canfilter 0x100-0x10F`
+          tag: current
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          makeLatest: true

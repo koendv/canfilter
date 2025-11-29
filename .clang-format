@@ -1,0 +1,20 @@
+BasedOnStyle: LLVM
+
+# Indentation and spacing
+IndentWidth:        4
+TabWidth:           4
+UseTab:             Never
+
+# brace style
+# BreakBeforeBraces:   Allman
+
+# Line length limit
+ColumnLimit:         120
+
+# No single-line short statements or functions
+AllowShortIfStatementsOnASingleLine:     false
+AllowShortLoopsOnASingleLine:            false
+AllowShortFunctionsOnASingleLine:        Empty
+
+# Case labels and switch formatting
+IndentCaseLabels:   true
