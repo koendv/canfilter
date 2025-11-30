@@ -2,6 +2,7 @@
 #   PROJECT SETTINGS
 # ============================================
 PROJECT := canfilter
+PREFIX ?= /usr/local
 BIN_LINUX := $(PROJECT)
 BIN_WIN := $(PROJECT).exe
 
@@ -27,14 +28,14 @@ DOC_MD := docs/canfilter.md
 #   COMPILERS
 # ============================================
 CXX := g++
-CXXFLAGS := -g -std=c++20 -Wall -Wextra -I$(INC_DIR)
+CXXFLAGS := -g -std=c++11 -Wall -Wextra -I$(INC_DIR)
 
 # Linux: dynamic link
 LDLIBS_LINUX := -lusb-1.0
 
 # Windows cross compiler
 CXX_WIN := x86_64-w64-mingw32-g++
-CXXFLAGS_WIN := -g -std=c++20 -Wall -Wextra -I$(INC_DIR) -I$(WIN_INC_DIR)
+CXXFLAGS_WIN := -g -std=c++11 -Wall -Wextra -I$(INC_DIR) -I$(WIN_INC_DIR)
 
 # Windows: static link
 LDLIBS_WIN := $(WIN_LIB_DIR)/libusb-1.0.a -static
@@ -106,6 +107,14 @@ package: all
 		$(DOC_MD) \
                 $(PROJECT)-package
 	zip -r9 $(PROJECT).zip $(PROJECT)-package
+
+# ============================================
+#   INSTALL
+# ============================================
+
+install: $(BIN_LINUX) $(MANPAGE)
+	install -Dm755 $(BIN_LINUX) $(DESTDIR)$(PREFIX)/bin/$(PROJECT)
+	install -Dm644 $(MANPAGE) $(DESTDIR)$(PREFIX)/share/man/man1/
 
 # ============================================
 #   CLEAN

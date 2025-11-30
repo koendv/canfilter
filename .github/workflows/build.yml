@@ -29,6 +29,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -39,6 +40,11 @@ jobs:
         run: |
           echo "Package contents:"
           unzip -l artifacts/canfilter.zip
+
+      - name: Delete Previous Release
+        run: gh release delete current --yes --cleanup-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
