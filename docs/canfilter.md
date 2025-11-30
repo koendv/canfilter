@@ -16,29 +16,32 @@ The tool supports individual CAN IDs and ID ranges, automatically converting ran
 
 ## OPTIONS
 
-**-o**, **--output** *MODE*  
+**-o**, **--output** *MODE*
 : Output mode: `bxcan`, `fdcan_g0`, `fdcan_h7` (default: `bxcan`)
 
-**-v**, **--verbose**  
+**-a**, **--allow-all**
+: Allow all packets
+
+**-v**, **--verbose**
 : Enable verbose output
 
-**-d**, **--dry-run**  
+**-d**, **--dry-run**
 : Parse and display filter configuration without programming hardware
 
-**-h**, **--help**  
+**-h**, **--help**
 : Show this help message
 
 ## ID/RANGE FORMAT
 
 CAN IDs and ranges can be specified in hexadecimal (`0x100`) or decimal (`256`) format. Multiple IDs/ranges can be separated by commas or spaces.
 
-*Single IDs*  
+*Single IDs*
 : `0x100`, `256`, `0x1FFFFFFF`
 
-*Ranges*  
+*Ranges*
 : `0x100-0x1FF`, `256-511`, `0x1000-0x1FFF`
 
-*Mixed*  
+*Mixed*
 : `0x100,0x200-0x2FF,0x1000` or `0x100 0x200-0x2FF 0x1000`
 
 ## EXAMPLES
@@ -61,29 +64,32 @@ Perform a dry run without programming hardware:
 canfilter 0x101-0x1FE -o bxcan --dry-run -v
 ```
 
-## HARDWARE SUPPORT
+## HARDWARE
 
-- **bxCAN**  
-    - STM32F1, STM32F4 series  
-    - 14 filter banks  
-    - Filters are masks, not ranges  
-    - Automatic conversion from ranges to masks
-- **FDCAN Small**  
-    - STM32G0 series  
-    - 28 standard + 8 extended filters  
-    - Native range filter support
-- **FDCAN Large**  
-    - STM32H7 series  
-    - 128 standard + 64 extended filters  
-    - Native range filter support
+STM32 with support for CANBUS classic or CAN FD.
 
-## EXIT STATUS
+- CANBUS classic: bxcan
+- CAN FD:
+    - low end: fdcan_g0 (28 standard + 8 extended filters)
+    - high end: fdcan_h7 (128 standard + 64 extended filters)
 
-0 if successful, non-zero on error.
+## ERROR CODES
+
+**CANFILTER_SUCCESS** (0)
+: Operation completed successfully
+
+**CANFILTER_ERROR_PARAM** (1)
+: Invalid parameter (ID out of range or invalid range)
+
+**CANFILTER_ERROR_FULL** (2)
+: No more filter banks available
+
+**CANFILTER_ERROR_PLATFORM** (3)
+: USB communication failed or hardware not found
 
 ## BUGS
 
-Report bugs at: [https://github.com/koendv/canfilter/](https://github)
+Report bugs at: [https://github.com/koendv/canfilter/](github)
 
 ## AUTHORS
 
@@ -91,5 +97,4 @@ Koen De Vleeschauwer
 
 ## COPYRIGHT
 
-CC0 Public Domain — see [https://github.com/koendv/canfilter/LICENSE.md](LICENSE) for details
-
+CC0 Public Domain — see LICENSE for details

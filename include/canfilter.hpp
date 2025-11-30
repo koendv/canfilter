@@ -35,7 +35,7 @@ class canfilter {
     virtual canfilter_error_t end() = 0;
 
     // Program hardware
-    virtual canfilter_error_t program() = 0;
+    virtual canfilter_error_t program() const = 0;
 
     // Add standard ID
     virtual canfilter_error_t add_std_id(uint32_t id) = 0;
@@ -61,5 +61,6 @@ class canfilter {
         return add_ext_range(0, max_ext_id);
     }
 
+    // Parse list of ID's and ranges
     bool parse(std::string_view input);
 };

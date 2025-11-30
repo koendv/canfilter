@@ -38,13 +38,17 @@ bool canfilter::parse(std::string_view input) {
             pos += (end - start);
             if (id1 <= max_std_id && id2 <= max_std_id)
                 add_std_range(id1, id2);
-            else
+            else if (id1 <= max_ext_id && id2 <= max_ext_id)
                 add_ext_range(id1, id2);
+            else
+                return false;
         } else {
             if (id1 <= max_std_id)
                 add_std_id(id1);
-            else
+            else if (id1 <= max_ext_id)
                 add_ext_id(id1);
+            else
+                return false;
         }
 
         // Check for comma or end of string

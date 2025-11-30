@@ -30,6 +30,9 @@ canfilter_error_t canfilter_bxcan::emit_std_list(uint32_t id1, uint32_t id2, uin
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
+    if (id1 > max_std_id || id2 > max_std_id || id3 > max_std_id || id4 > max_std_id)
+        return CANFILTER_ERROR_PARAM;
+
     uint32_t fr1 = (id2 << 21) | (id1 << 5);
     uint32_t fr2 = (id4 << 21) | (id3 << 5);
 
@@ -50,6 +53,9 @@ canfilter_error_t canfilter_bxcan::emit_std_list(uint32_t id1, uint32_t id2, uin
 canfilter_error_t canfilter_bxcan::emit_std_mask(uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
+
+    if (id1 > max_std_id || mask1 > max_std_id || id2 > max_std_id || mask2 > max_std_id)
+        return CANFILTER_ERROR_PARAM;
 
     uint32_t fr1 = (mask1 << 21) | (id1 << 5);
     uint32_t fr2 = (mask2 << 21) | (id2 << 5);
@@ -72,6 +78,9 @@ canfilter_error_t canfilter_bxcan::emit_ext_list(uint32_t id1, uint32_t id2) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
+    if (id1 > max_ext_id || id2 > max_ext_id)
+        return CANFILTER_ERROR_PARAM;
+
     uint32_t fr1 = (id1 << 3);
     uint32_t fr2 = (id2 << 3);
 
@@ -93,6 +102,9 @@ canfilter_error_t canfilter_bxcan::emit_ext_mask(uint32_t id1, uint32_t mask1) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
+    if (id1 > max_ext_id || mask1 > max_ext_id)
+        return CANFILTER_ERROR_PARAM;
+
     uint32_t fr1 = (id1 << 3);
     uint32_t fr2 = (mask1 << 3);
 
@@ -113,6 +125,9 @@ canfilter_error_t canfilter_bxcan::emit_ext_mask(uint32_t id1, uint32_t mask1) {
 canfilter_error_t canfilter_bxcan::add_std_list(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
+    if (std_list_count > 3)
+        return CANFILTER_ERROR_PARAM;
+
     std_list[std_list_count++] = id;
     if (std_list_count == 1) {
         std_list[1] = id;
@@ -128,6 +143,9 @@ canfilter_error_t canfilter_bxcan::add_std_list(uint32_t id) {
 
 canfilter_error_t canfilter_bxcan::add_std_mask(uint32_t id, uint32_t mask) {
     canfilter_error_t err = CANFILTER_SUCCESS;
+
+    if (std_mask_count > 1)
+        return CANFILTER_ERROR_PARAM;
 
     std_mask[std_mask_count].id = id;
     std_mask[std_mask_count++].mask = mask;
@@ -145,6 +163,9 @@ canfilter_error_t canfilter_bxcan::add_std_mask(uint32_t id, uint32_t mask) {
 canfilter_error_t canfilter_bxcan::add_ext_list(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
+    if (ext_list_count > 1)
+        return CANFILTER_ERROR_PARAM;
+
     ext_list[ext_list_count++] = id;
     if (ext_list_count == 1) {
         ext_list[1] = id;
@@ -161,7 +182,7 @@ canfilter_error_t canfilter_bxcan::add_ext_mask(uint32_t id, uint32_t mask) {
 }
 
 /* CIDR aggregation code */
-int canfilter_bxcan::std_largest_prefix(uint32_t begin, uint32_t end) {
+int canfilter_bxcan::std_largest_prefix(uint32_t begin, uint32_t end) const {
     int prefix = 11;
     while (prefix > 0) {
         uint32_t mask_bit = 1U << (11 - prefix);
@@ -179,7 +200,7 @@ int canfilter_bxcan::std_largest_prefix(uint32_t begin, uint32_t end) {
     return prefix;
 }
 
-int canfilter_bxcan::ext_largest_prefix(uint32_t begin, uint32_t end) {
+int canfilter_bxcan::ext_largest_prefix(uint32_t begin, uint32_t end) const {
     int prefix = 29;
     while (prefix > 0) {
         uint32_t mask_bit = 1U << (29 - prefix);
@@ -221,7 +242,7 @@ canfilter_error_t canfilter_bxcan::end() {
     return err;
 }
 
-canfilter_error_t canfilter_bxcan::program() {
+canfilter_error_t canfilter_bxcan::program() const {
     bool retval = canfilter_send_usb(&hw_config, sizeof(hw_config));
     return retval ? CANFILTER_SUCCESS : CANFILTER_ERROR_PLATFORM;
 }
@@ -229,14 +250,14 @@ canfilter_error_t canfilter_bxcan::program() {
 canfilter_error_t canfilter_bxcan::add_std_range(uint32_t begin, uint32_t end) {
     canfilter_error_t err;
 
+    if (begin > max_std_id || end > max_std_id)
+        return CANFILTER_ERROR_PARAM;
+
     if (begin > end) {
         uint32_t temp = end;
         end = begin;
         begin = temp;
     }
-
-    if (end > max_std_id)
-        return CANFILTER_ERROR_PARAM;
 
     /* CIDR aggregation: range to network algorithm */
     while (begin <= end) {
@@ -267,14 +288,14 @@ canfilter_error_t canfilter_bxcan::add_std_range(uint32_t begin, uint32_t end) {
 canfilter_error_t canfilter_bxcan::add_ext_range(uint32_t begin, uint32_t end) {
     canfilter_error_t err;
 
+    if (begin > max_ext_id || end > max_ext_id)
+        return CANFILTER_ERROR_PARAM;
+
     if (begin > end) {
         uint32_t temp = end;
         end = begin;
         begin = temp;
     }
-
-    if (end > max_ext_id)
-        return CANFILTER_ERROR_PARAM;
 
     /* CIDR aggregation: range to network algorithm */
     while (begin <= end) {

@@ -25,6 +25,26 @@ void print_help(const char *prog_name) {
               << std::endl;
 }
 
+void print_error(canfilter_error_t err) {
+    switch (err) {
+        case CANFILTER_SUCCESS:
+            std::cout << "operation completed successfully" << std::endl;
+            break;
+        case CANFILTER_ERROR_PARAM:
+            std::cout << "invalid parameter (id out of range or invalid range)" << std::endl;
+            break;
+        case CANFILTER_ERROR_FULL:
+            std::cout << "no more filter banks available" << std::endl;
+            break;
+        case CANFILTER_ERROR_PLATFORM:
+            std::cout << "usb communication failed or hardware not found" << std::endl;
+            break;
+        default:
+            std::cout << "invalid error code" << std::endl;
+            break;
+    }
+}
+
 bool canfilter_cli(int argc, char *argv[]) {
     std::unique_ptr<canfilter> filter;
     std::string output_mode = "bxcan";
@@ -93,44 +113,30 @@ bool canfilter_cli(int argc, char *argv[]) {
     }
 
     // debugging
-    if (verbose) {
+    if (verbose > 1) {
+        // print registers as ranges and ids
         filter->debug_print();
 
-        if (verbose > 1)
+        if (verbose > 2)
+            // dump registers in hex
             filter->debug_print_reg();
     }
 
-    // program hardware filter
+    // no programming if dry run.
     if (dry_run) {
         if (verbose)
             std::cerr << std::format("not programming hardware\n");
         return true;
     }
 
+    // program hardware filter
     canfilter_error_t err = filter->program();
 
-    // error code
-    if (verbose) {
-        switch (err) {
-            case CANFILTER_SUCCESS:
-                std::cout << "operation completed successfully" << std::endl;
-                break;
-            case CANFILTER_ERROR_PARAM:
-                std::cout << "invalid parameter (id out of range or invalid range)" << std::endl;
-                break;
-            case CANFILTER_ERROR_FULL:
-                std::cout << "no more filter banks available" << std::endl;
-                break;
-            case CANFILTER_ERROR_PLATFORM:
-                std::cout << "usb communication failed or hardware not found" << std::endl;
-                break;
-            default:
-                std::cout << "invalid error code" << std::endl;
-                break;
-        }
-    }
+    // print error code
+    if (verbose || err != CANFILTER_SUCCESS)
+        print_error(err);
 
-    return err;
+    return err == CANFILTER_SUCCESS;
 }
 
 int main(int argc, char *argv[]) {

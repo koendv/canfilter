@@ -30,7 +30,7 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val> cl
     // Override methods (same for all versions)
     void begin() override;
     canfilter_error_t end() override;
-    canfilter_error_t program() override;
+    canfilter_error_t program() const override;
     canfilter_error_t add_std_id(uint32_t id) override;
     canfilter_error_t add_ext_id(uint32_t id) override;
     canfilter_error_t add_std_range(uint32_t start, uint32_t end) override;
@@ -46,6 +46,8 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val> cl
     // Standard IDs
     uint32_t std_id[2];
     uint8_t std_id_count = 0;
+
+    // Write filter bank
     canfilter_error_t emit_std_id(uint32_t id1, uint32_t id2);
     canfilter_error_t emit_std_range(uint32_t id1, uint32_t id2);
     canfilter_error_t emit_ext_id(uint32_t id1, uint32_t id2);

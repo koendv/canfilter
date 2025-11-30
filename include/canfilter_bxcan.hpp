@@ -31,12 +31,12 @@ class canfilter_bxcan : public canfilter {
 
     void begin() override;
     canfilter_error_t end() override;
-    canfilter_error_t program() override;
+    canfilter_error_t program() const override;
 
     canfilter_error_t add_std_id(uint32_t id) override;
     canfilter_error_t add_ext_id(uint32_t id) override;
-    canfilter_error_t add_std_range(uint32_t start, uint32_t end) override;
-    canfilter_error_t add_ext_range(uint32_t start, uint32_t end) override;
+    canfilter_error_t add_std_range(uint32_t begin, uint32_t end) override;
+    canfilter_error_t add_ext_range(uint32_t begin, uint32_t end) override;
 
     void debug_print_reg() const override;
     void debug_print() const override;
@@ -61,8 +61,8 @@ class canfilter_bxcan : public canfilter {
     uint32_t std_list_count = 0;
 
     // helpers
-    int std_largest_prefix(uint32_t begin, uint32_t end);
-    int ext_largest_prefix(uint32_t begin, uint32_t end);
+    int std_largest_prefix(uint32_t begin, uint32_t end) const;
+    int ext_largest_prefix(uint32_t begin, uint32_t end) const;
 
     // Write filter banks
     canfilter_error_t emit_std_list(uint32_t id1, uint32_t id2, uint32_t id3, uint32_t id4);
@@ -70,6 +70,7 @@ class canfilter_bxcan : public canfilter {
     canfilter_error_t emit_ext_list(uint32_t id1, uint32_t id2);
     canfilter_error_t emit_ext_mask(uint32_t id1, uint32_t mask1);
 
+    // Add to list or mask
     canfilter_error_t add_std_list(uint32_t id);
     canfilter_error_t add_std_mask(uint32_t id, uint32_t mask);
     canfilter_error_t add_ext_list(uint32_t id);

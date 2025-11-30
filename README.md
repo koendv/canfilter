@@ -1,10 +1,12 @@
 # CanFilter
 
+Note: at the moment this is still in testing.
+
 **CanFilter** is a command-line tool for managing hardware filters on patched [candlelight](https://github.com/koendv/candleLight_fw) USB-CAN adapters.
 
 _canfilter_ takes human-readable CAN bus ID's and ID ranges and converts them into CAN bus hardware filter configurations.
 
-_canfilter_ is a cross-platform command-line tool and C library for managing CAN bus hardware filters. It supports Linux and Windows.
+_canfilter_ is a cross-platform command-line tool and C library for managing CAN bus hardware filters. _canfilter_ supports Linux and Windows.
 
 ## Features
 
@@ -24,41 +26,48 @@ IDs: Single CAN IDs (0x100, 256, 0x1000)
 
 RANGES: CAN ID ranges (0x100-0x1FF, 256-511, 0x1000-0x1FFF)
 
-| Short   | Long          | Description                                      |
-| ------- | ------------- | ------------------------------------------------ |
+| Short   | Long          | Description                                |
+| ------- | ------------- | ------------------------------------------ |
 | -o MODE | --output MODE | Set output mode: bxcan, fdcan_g0, fdcan_h7 |
-| -v      | --verbose     | Enable verbose output                            |
-| -h      | --help        | Show this help                                   |
+| -a      | --allow-all   | Allow all packets                          |
+| -v      | --verbose     | Enable verbose output                      |
+| -h      | --help        | Show this help                             |
+
 
 - Single IDs or ranges without options are interpreted as standard if <= 0x7FF, extended if <= 0x1FFFFFFF.
 - Hex numbers are supported (prefix `0x`).
 - Ranges are interpreted as extended if lower or upper bound is an extended ID.
+- Repeating -v up to three times results in more verbose output.
 
 ## Examples
 
 Add a single standard ID and show in text:
 
 ```
-canfilter -s 0x100 -o bxcan
+canfilter 0x100 -o bxcan
 ```
 
 Add multiple IDs and ranges for bxCAN:
 
 ```
-canfilter -S 0x100-0x1FF -e 0x1ABCDE -o bxcan
+canfilter 0x100-0x1FF 0x1ABCDE -o bxcan
 ```
+## FDCAN and BXCAN comparison
 
-An example to illustrate the difference between FDCAN and BXCAN filtering. FDCAN has native range filtering hardware. The range 0x101-0x1fe is converted to a single filter bank:
+An example to illustrate the difference between FDCAN and BXCAN filtering.
+
+FDCAN has native range filtering hardware. The range 0x101-0x1fe is converted to a single filter bank:
 
 ```
-$ ./canfilter -v -o fdcan_g0 0x101-0x1fe 
+$ ./canfilter -v -o fdcan_g0 0x101-0x1fe
 fdcan debug
 sf[ 0]: range 0x101 0x1fe fifo0
 ```
+
 BXCAN filters are masks, not ranges. The range 0x101-0x1fe is converted to 2 id's and 12 masks:
 
 ```
-$ canfilter -v -o bxcan 0x101-0x1fe 
+$ canfilter -v -o bxcan 0x101-0x1fe
 bxcan std list id 0x101
 bxcan std mask id 0x102 mask 7fe
 bxcan std mask id 0x104 mask 7fc
@@ -73,24 +82,51 @@ bxcan std mask id 0x1f0 mask 7f8
 bxcan std mask id 0x1f8 mask 7fc
 bxcan std mask id 0x1fc mask 7fe
 bxcan std list id 0x1fe
-bxcan debug:
-bank [ 0]: std mask 0x102-0x103, 0x104-0x107
-bank [ 1]: std mask 0x108-0x10f, 0x110-0x11f
-bank [ 2]: std mask 0x120-0x13f, 0x140-0x17f
-bank [ 3]: std mask 0x180-0x1bf, 0x1c0-0x1df
-bank [ 4]: std mask 0x1e0-0x1ef, 0x1f0-0x1f7
-bank [ 5]: std mask 0x1f8-0x1fb, 0x1fc-0x1fd
-bank [ 6]: std list 0x101, 0x1fe, 0x101, 0x101
 Device features: 0xFB, filter support: YES
 operation completed successfully
+```
 
+By comparison, filtering the range 0x100-0x1ff on bxcan uses only half a filter bank:
+
+```
+$ canfilter 0x100-0x1ff -v
+bxcan std mask id 0x100 mask 700
+Device features: 0xFB, filter support: YES
+operation completed successfully
+```
+
+BXCAN is very efficient if a range is a power of two wide, and the range begins on a multiple of a power of two. If you run out of filter banks on bxcan, try rewriting your filters to align with powers of two.
+
+Now comparing FDCAN on STM32G0 and STM32H7:
+
+| filters  | standard | extended |
+| -------- | -------- | -------- |
+| fdcan_g0 | 28       | 8        |
+| fdcan_h7 | 128      | 64       |
+
+The difference between FDCAN on STM32G0 and STM32H7 is the number of filters available.
+
+## Building
+
+Prerequisites:
+
+- C++20 compiler
+- libusb-1.0 development libraries
+- CMake, gnu make
+
+Build:
+
+```bash
+mkdir build && cd build
+cmake ..
+make
 ```
 
 ## Notes
 
 The key insight behind the _canfilter_ tool is that CANBUS hardware filters (ID + mask) are mathematically equivalent to IP network blocks (network + prefix).
 
-This means IP networking code can be applied to CANBUS. CIDR aggregation is a mature IP networking algorithm to convert IP addresses and address ranges into a list of IP networks. Applied to CANBUS, the CIDR algorithm rewrites a list of CANBUS addresses and address ranges into a list of hardware filters.
+This means IP networking code can be applied to CANBUS. CIDR aggregation is a mature IP networking algorithm that converts IP addresses and address ranges into a list of IP networks. Applied to CANBUS, the CIDR algorithm rewrites a list of CANBUS addresses and address ranges into a list of hardware filters.
 
 ## Bugs
 

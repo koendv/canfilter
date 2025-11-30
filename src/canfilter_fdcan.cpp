@@ -28,8 +28,10 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_std_id(uint32_t id1, uint32_t id2) {
     if (hw_config.std_count >= max_std_filter)
         return CANFILTER_ERROR_FULL;
-    id1 &= max_std_id;
-    id2 &= max_std_id;
+
+    if (id1 > max_std_id || id2 > max_std_id)
+        return CANFILTER_ERROR_PARAM;
+
     uint32_t sfr = (SFT_DUAL << 30) | (SFEC_RX_FIFO0 << 27) | (id1 << 16) | id2;
     hw_config.std_filters[hw_config.std_count++] = sfr;
     return CANFILTER_SUCCESS;
@@ -39,8 +41,10 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_std_range(uint32_t id1, uint32_t id2) {
     if (hw_config.std_count >= max_std_filter)
         return CANFILTER_ERROR_FULL;
-    id1 &= max_std_id;
-    id2 &= max_std_id;
+
+    if (id1 > max_std_id || id2 > max_std_id || id1 > id2)
+        return CANFILTER_ERROR_PARAM;
+
     uint32_t sfr = (SFT_RANGE << 30) | (SFEC_RX_FIFO0 << 27) | (id1 << 16) | id2;
     hw_config.std_filters[hw_config.std_count++] = sfr;
     return CANFILTER_SUCCESS;
@@ -50,8 +54,12 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_ext_id(uint32_t id1, uint32_t id2) {
     if (hw_config.ext_count >= max_ext_filter)
         return CANFILTER_ERROR_FULL;
-    uint64_t efid1 = id1 & max_ext_id;
-    uint64_t efid2 = id2 & max_ext_id;
+
+    if (id1 > max_ext_id || id2 > max_ext_id)
+        return CANFILTER_ERROR_PARAM;
+
+    uint64_t efid1 = id1;
+    uint64_t efid2 = id2;
     uint64_t efr = (EFEC_RX_FIFO0 << 61) | (efid1 << 32) | (EFT_DUAL << 30) | efid2;
     hw_config.ext_filters[hw_config.ext_count++] = efr;
     return CANFILTER_SUCCESS;
@@ -61,8 +69,12 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_ext_range(uint32_t id1, uint32_t id2) {
     if (hw_config.ext_count >= max_ext_filter)
         return CANFILTER_ERROR_FULL;
-    uint64_t efid1 = id1 & max_ext_id;
-    uint64_t efid2 = id2 & max_ext_id;
+
+    if (id1 > max_ext_id || id2 > max_ext_id || id1 > id2)
+        return CANFILTER_ERROR_PARAM;
+
+    uint64_t efid1 = id1;
+    uint64_t efid2 = id2;
     uint64_t efr = (EFEC_RX_FIFO0 << 61) | (efid1 << 32) | (EFT_RANGE << 30) | efid2;
     hw_config.ext_filters[hw_config.ext_count++] = efr;
     return CANFILTER_SUCCESS;
@@ -71,7 +83,7 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit
 // Constructor for base class, setting default values
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::canfilter_fdcan() {
-    // Any additional initialization code if needed
+    // no additional initialization code needed
 }
 
 // Begin function: Can initialize or reset hardware configuration
@@ -104,7 +116,7 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::end(
 
 // Program function: Apply configuration to hardware
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
-canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::program() {
+canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::program() const {
     bool retval = canfilter_send_usb(&hw_config, sizeof(hw_config));
     return retval ? CANFILTER_SUCCESS : CANFILTER_ERROR_PLATFORM;
 }
@@ -113,6 +125,9 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::prog
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_std_id(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
+
+    if (id > max_std_id || std_id_count > 1)
+        return CANFILTER_ERROR_PARAM;
 
     std_id[std_id_count++] = id;
     if (std_id_count == 1) {
@@ -129,6 +144,9 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_ext_id(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
+    if (id > max_ext_id || ext_id_count > 1)
+        return CANFILTER_ERROR_PARAM;
+
     ext_id[ext_id_count++] = id;
     if (ext_id_count == 1) {
         ext_id[1] = id;
@@ -141,28 +159,34 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_
 
 // Add standard ID range
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
-canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_std_range(uint32_t start,
+canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_std_range(uint32_t begin,
                                                                                           uint32_t end) {
-    if (start <= end)
-        return emit_std_range(start, end);
+    if (begin > max_std_id || end > max_std_id)
+        return CANFILTER_ERROR_PARAM;
+
+    if (begin <= end)
+        return emit_std_range(begin, end);
     else
-        return emit_std_range(end, start);
+        return emit_std_range(end, begin);
 }
 
 // Add extended ID range
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
-canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_ext_range(uint32_t start,
+canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_ext_range(uint32_t begin,
                                                                                           uint32_t end) {
-    if (start <= end)
-        return emit_ext_range(start, end);
+    if (begin > max_ext_id || end > max_ext_id)
+        return CANFILTER_ERROR_PARAM;
+
+    if (begin <= end)
+        return emit_ext_range(begin, end);
     else
-        return emit_ext_range(end, start);
+        return emit_ext_range(end, begin);
 }
 
 // Debug print function: Show configuration (e.g., filter registers)
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print_reg() const {
-    std::cout << "fd-can debug print\n";
+    std::cout << "fd-can registers:\n";
     std::cout << "standard filters:\n";
     for (uint32_t i = 0; i < hw_config.std_count; ++i) {
         std::cout << std::format("sf[{:2d}]: 0x{:03x}\n", i, hw_config.std_filters[i]);
@@ -178,7 +202,7 @@ void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print() con
     static const char *ft_str[4] = {"range", "dual", "mask", "off"};
     static const char *fec_str[8] = {"off", "fifo0", "fifo1", "reject", "prio", "prio fifo0", "prio fifo1", "not used"};
 
-    std::cout << "fdcan debug\n";
+    std::cout << "fdcan debug:\n";
     for (uint32_t i = 0; i < hw_config.std_count; ++i) {
         uint32_t sfid1 = (hw_config.std_filters[i] >> 16) & max_std_id;
         uint32_t sfid2 = (hw_config.std_filters[i] & max_std_id);
