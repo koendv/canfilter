@@ -1,13 +1,58 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*
+ * canfilter_usb.cpp
+ *
+ * Implements USB interaction for programming CAN filters on compatible devices.
+ *
+ * Responsibilities:
+ * - Discover and open devices using VID:PID (with optional serial number).
+ * - Query device capabilities and determine hardware filter availability.
+ * - Program filter configuration to the device via USB control transfers.
+ *
+ * Notes:
+ * - Uses libusb-1.0 API for cross-platform USB communication.
+ * - Supports vendor-specific CAN filter USB requests defined in gs_usb_breq.
+ * - Dependent on device firmware supporting gs_usb SET_FILTER.
+ */
 
-#include "canfilter_usb.h"
+#include "canfilter_usb.hpp"
 #include <libusb-1.0/libusb.h>
-#include <stdio.h>
 
-// Define the device capability structure
-typedef struct {
+#define CANDLE_USB_CTRL_IN (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE | LIBUSB_ENDPOINT_IN)
+#define CANDLE_USB_CTRL_OUT (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE | LIBUSB_ENDPOINT_OUT)
+
+#define GS_CAN_FEATURE_FILTER (1 << 16)
+
+// structures and enums (same as in candlelight_fw)
+enum gs_usb_breq {
+    GS_USB_BREQ_HOST_FORMAT = 0,
+    GS_USB_BREQ_BITTIMING,
+    GS_USB_BREQ_MODE,
+    GS_USB_BREQ_BERR,
+    GS_USB_BREQ_BT_CONST,
+    GS_USB_BREQ_DEVICE_CONFIG,
+    GS_USB_BREQ_TIMESTAMP,
+    GS_USB_BREQ_IDENTIFY,
+    GS_USB_BREQ_GET_USER_ID, // not implemented
+    GS_USB_BREQ_SET_USER_ID, // not implemented
+    GS_USB_BREQ_DATA_BITTIMING,
+    GS_USB_BREQ_BT_CONST_EXT,
+    GS_USB_BREQ_SET_TERMINATION,
+    GS_USB_BREQ_GET_TERMINATION,
+    GS_USB_BREQ_GET_STATE,
+    GS_USB_BREQ_SET_FILTER,
+    GS_USB_BREQ_GET_FILTER,
+    __GS_USB_BREQ_PLACEHOLDER_17,
+    __GS_USB_BREQ_PLACEHOLDER_18,
+    __GS_USB_BREQ_PLACEHOLDER_19,
+    GS_USB_BREQ_ELM_GET_BOARDINFO = 20,
+    GS_USB_BREQ_ELM_SET_FILTER,
+    GS_USB_BREQ_ELM_GET_LASTERROR,
+    GS_USB_BREQ_ELM_SET_BUSLOADREPORT,
+    GS_USB_BREQ_ELM_SET_PINSTATUS,
+    GS_USB_BREQ_ELM_GET_PINSTATUS,
+};
+
+struct gs_device_capability {
     uint32_t feature;
     uint32_t fclk_can;
     uint32_t tseg1_min;
@@ -18,104 +63,53 @@ typedef struct {
     uint32_t brp_min;
     uint32_t brp_max;
     uint32_t brp_inc;
-} __attribute__((packed)) gs_device_capability;
+} __attribute__((packed));
 
-// Check if the GS_USB device supports hardware filtering
-static bool canfilter_check_hw_support(libusb_device_handle *dev_handle) {
-    gs_device_capability cap;
+struct gs_filter_info {
+    uint8_t dev;
+    uint8_t reserved[3];
+} __attribute__((packed)) __attribute__((aligned(4)));
 
-    if (!dev_handle) {
-        fprintf(stderr, "ERROR: NULL device handle for feature check\n");
+bool canfilter_usb::open() {
+    USBDEVICE_LOG("Scanning CAN filter VIDs/PIDs");
+    return open_from_list(default_vid_pid_list_);
+}
+
+bool canfilter_usb::open(uint16_t vid, uint16_t pid, std::string serial) {
+    return open_vid_pid(vid, pid, serial);
+}
+
+bool canfilter_usb::hasHardwareFilter() {
+    if (!handle_ && !open())
         return false;
-    }
 
-    int ret = libusb_control_transfer(dev_handle,
-                                      0xC1,    // device-to-host, vendor, interface
-                                      4, 0, 0, // wValue, wIndex
+    gs_device_capability cap{};
+    int ret = libusb_control_transfer((libusb_device_handle *)handle_, CANDLE_USB_CTRL_IN, GS_USB_BREQ_BT_CONST, 0, 0,
                                       (unsigned char *)&cap, sizeof(cap), 1000);
 
-    if (ret != sizeof(cap)) {
-        fprintf(stderr, "Failed to read device capabilities: %s\n", libusb_error_name(ret));
-        return false;
-    }
-
-    bool has_filter_support = (cap.feature & (1 << 6)) != 0; // GS_CAN_FEATURE_USER_ID
-    printf("Device features: 0x%X, filter support: %s\n", cap.feature, has_filter_support ? "YES" : "NO");
-
-    return has_filter_support;
+    return ret == sizeof(cap) && (cap.feature & GS_CAN_FEATURE_FILTER);
 }
 
-// Send configuration data to the USB device
-bool canfilter_send_usb(const void *config, uint32_t size) {
-    libusb_context *ctx = NULL;
-    libusb_device_handle *dev_handle = NULL;
-    int ret;
+uint32_t canfilter_usb::getFilterInfo() {
+    if (!handle_ && !open())
+        return 0;
 
-    // Initialize libusb
-    ret = libusb_init(&ctx);
-    if (ret < 0) {
-        fprintf(stderr, "Failed to initialize libusb: %s\n", libusb_error_name(ret));
-        return false;
-    }
+    gs_filter_info finfo{};
+    int ret = libusb_control_transfer((libusb_device_handle *)handle_, CANDLE_USB_CTRL_IN, GS_USB_BREQ_GET_FILTER, 0, 0,
+                                      (unsigned char *)&finfo, sizeof(finfo), 1000);
 
-    // Find and open GS_USB device
-    dev_handle = libusb_open_device_with_vid_pid(ctx, GS_USB_VENDOR_ID, GS_USB_PRODUCT_ID);
-    if (!dev_handle) {
-        fprintf(stderr, "Failed to find GS_USB device\n");
-        libusb_exit(ctx);
-        return false;
-    }
+    if (ret != sizeof(finfo))
+        return 0;
 
-// Detach kernel driver if active (Linux-specific)
-#ifdef __linux__
-    if (libusb_kernel_driver_active(dev_handle, 0) == 1) {
-        ret = libusb_detach_kernel_driver(dev_handle, 0);
-        if (ret < 0) {
-            fprintf(stderr, "Warning: Failed to detach kernel driver: %s\n", libusb_error_name(ret));
-        }
-    }
-#endif
-
-    // Claim interface
-    ret = libusb_claim_interface(dev_handle, 0);
-    if (ret < 0) {
-        fprintf(stderr, "Failed to claim interface: %s\n", libusb_error_name(ret));
-        libusb_close(dev_handle);
-        libusb_exit(ctx);
-        return false;
-    }
-
-    // Check hardware support
-    if (!canfilter_check_hw_support(dev_handle)) {
-        fprintf(stderr, "Error: Hardware filter support not available.\n");
-        libusb_release_interface(dev_handle, 0);
-        libusb_close(dev_handle);
-        libusb_exit(ctx);
-        return false;
-    }
-
-    // Send configuration data
-    ret = libusb_control_transfer(dev_handle, 0x41, // host-to-device, vendor, interface
-                                  GS_USB_BREQ_SET_USER_ID, 0, 0, (unsigned char *)config, size, 1000);
-
-    // Cleanup
-    libusb_release_interface(dev_handle, 0);
-#ifdef __linux__
-    if (libusb_kernel_driver_active(dev_handle, 0) == 0) {
-        libusb_attach_kernel_driver(dev_handle, 0);
-    }
-#endif
-    libusb_close(dev_handle);
-    libusb_exit(ctx);
-
-    if (ret != (int)size) {
-        fprintf(stderr, "Error sending hardware configuration: sent %d of %u bytes\n", ret, size);
-        return false;
-    }
-
-    return true;
+    return finfo.dev;
 }
 
-#ifdef __cplusplus
+bool canfilter_usb::programFilter(const void *config, uint32_t size) {
+    if (!handle_ && !open())
+        return false;
+
+    int ret = libusb_control_transfer((libusb_device_handle *)handle_, CANDLE_USB_CTRL_OUT, GS_USB_BREQ_SET_FILTER, 0,
+                                      0, (unsigned char *)config, size, 1000);
+
+    return ret == (int)size;
 }
-#endif

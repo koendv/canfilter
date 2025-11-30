@@ -8,6 +8,7 @@ jobs:
   build:
     name: build canfilter
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -29,6 +30,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -39,6 +41,14 @@ jobs:
         run: |
           echo "Package contents:"
           unzip -l artifacts/canfilter.zip
+
+      - name: Delete Previous Release
+        run: |
+          if gh release view current >/dev/null 2>&1; then
+              gh release delete current --yes --cleanup-tag
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
