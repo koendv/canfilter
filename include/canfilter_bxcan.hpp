@@ -40,6 +40,7 @@ class canfilter_bxcan : public canfilter {
 
     void debug_print_reg() const override;
     void debug_print() const override;
+    void print_usage() const override;
 
   private:
     uint32_t bank = 0; /* current register bank */

@@ -70,8 +70,8 @@ STM32 with support for CANBUS classic or CAN FD.
 
 - CANBUS classic: bxcan
 - CAN FD:
-    - low end: fdcan_g0 (28 standard + 8 extended filters)
-    - high end: fdcan_h7 (128 standard + 64 extended filters)
+    - low end: fdcan_g0 (STM32G0: 28 standard + 8 extended filters)
+    - high end: fdcan_h7 (STM32H7: 128 standard + 64 extended filters)
 
 ## ERROR CODES
 

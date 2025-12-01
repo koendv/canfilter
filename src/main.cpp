@@ -122,6 +122,11 @@ bool canfilter_cli(int argc, char *argv[]) {
             filter->debug_print_reg();
     }
 
+    // usage
+    if (verbose)
+        std::cout << "\n";
+    filter->print_usage();
+
     // no programming if dry run.
     if (dry_run) {
         if (verbose)

@@ -219,6 +219,16 @@ void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print() con
     }
 }
 
+template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
+void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::print_usage() const {
+    uint32_t std_percent = (hw_config.std_count * 100 + max_std_filter / 2) / max_std_filter;
+    uint32_t ext_percent = (hw_config.ext_count * 100 + max_ext_filter / 2) / max_ext_filter;
+
+    std::cout << std::format("Filter usage: {}/{} standard ({}%), {}/{} extended ({}%)\n", hw_config.std_count,
+                             max_std_filter, std_percent, hw_config.ext_count, max_ext_filter, ext_percent);
+    return;
+}
+
 // Explicit template instantiation for G0 and H7
 // fdcan for stm32g0: 28 standard filters, 8 extended filters, first byte of usb packet 1
 template class canfilter_fdcan<28, 8, CANFILTER_DEV_FDCAN_G0>;

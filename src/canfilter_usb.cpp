@@ -40,7 +40,7 @@ static bool canfilter_check_hw_support(libusb_device_handle *dev_handle) {
     }
 
     bool has_filter_support = (cap.feature & (1 << 6)) != 0; // GS_CAN_FEATURE_USER_ID
-    printf("Device features: 0x%X, filter support: %s\n", cap.feature, has_filter_support ? "YES" : "NO");
+    // printf("Device features: 0x%X, filter support: %s\n", cap.feature, has_filter_support ? "YES" : "NO");
 
     return has_filter_support;
 }

@@ -390,3 +390,9 @@ void canfilter_bxcan::debug_print() const {
         }
     }
 }
+
+void canfilter_bxcan::print_usage() const {
+    uint32_t percent = (bank * 100 + max_banks / 2) / max_banks;
+    std::cout << std::format("Filter usage: {}/{} ({}%)\n", bank, max_banks, percent);
+    return;
+}

@@ -52,6 +52,7 @@ class canfilter {
     // Print debug information
     virtual void debug_print_reg() const = 0;
     virtual void debug_print() const = 0;
+    virtual void print_usage() const = 0;
 
     // Allow all traffic (standard + extended IDs)
     canfilter_error_t allow_all() {

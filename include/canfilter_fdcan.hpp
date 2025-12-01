@@ -37,6 +37,7 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val> cl
     canfilter_error_t add_ext_range(uint32_t start, uint32_t end) override;
     void debug_print_reg() const override;
     void debug_print() const override;
+    void print_usage() const override;
 
   private:
     // Extended IDs
