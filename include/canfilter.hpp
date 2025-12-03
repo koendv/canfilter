@@ -5,9 +5,13 @@
 #include <string_view>
 
 /* Controller types - MUST MATCH CANDLELIGHT_FW */
-#define CANFILTER_DEV_BXCAN 0
-#define CANFILTER_DEV_FDCAN_G0 1
-#define CANFILTER_DEV_FDCAN_H7 2
+typedef enum {
+    CANFILTER_DEV_NONE = 0, /* no hardware filter */
+    CANFILTER_DEV_BXCAN,    /* bxcan, 14 filters */
+    CANFILTER_DEV_BXCAN2,   /* dual bxcan, 28 filters */
+    CANFILTER_DEV_FDCAN_G0, /* bosch m_can, 28 standard, 8 extended filters */
+    CANFILTER_DEV_FDCAN_H7, /* bosch m_can, 128 standard, 64 extended filters */
+} canfilter_hardware_t;
 
 /* Error codes */
 typedef enum {
