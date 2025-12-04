@@ -47,7 +47,7 @@ void print_error(canfilter_error_t err) {
 
 bool canfilter_cli(int argc, char *argv[]) {
     std::unique_ptr<canfilter> filter;
-    std::string output_mode = "bxcan";
+    std::string output_mode = "bxcan_f0";
     int verbose = 0;
     bool dry_run = false;
     bool allow_all = false;
