@@ -7,8 +7,8 @@
 /* Controller types - MUST MATCH CANDLELIGHT_FW */
 typedef enum {
     CANFILTER_DEV_NONE = 0, /* no hardware filter */
-    CANFILTER_DEV_BXCAN,    /* bxcan, 14 filters */
-    CANFILTER_DEV_BXCAN2,   /* dual bxcan, 28 filters */
+    CANFILTER_DEV_BXCAN_F0, /* bxcan on F0/F1/F3, 14 filters */
+    CANFILTER_DEV_BXCAN_F4, /* bxcan on F4/F7, 28 filters */
     CANFILTER_DEV_FDCAN_G0, /* bosch m_can, 28 standard, 8 extended filters */
     CANFILTER_DEV_FDCAN_H7, /* bosch m_can, 128 standard, 64 extended filters */
 } canfilter_hardware_t;

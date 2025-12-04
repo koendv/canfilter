@@ -17,7 +17,7 @@ The tool supports individual CAN IDs and ID ranges, automatically converting ran
 ## OPTIONS
 
 **-o**, **--output** *MODE*
-: Output mode: `bxcan`, `fdcan_g0`, `fdcan_h7` (default: `bxcan`)
+: Output mode: `bxcan_f0`, `bxcan_f4`,  `fdcan_g0`, `fdcan_h7` (default: `bxcan_f0`)
 
 **-a**, **--allow-all**
 : Allow all packets
@@ -49,7 +49,7 @@ CAN IDs and ranges can be specified in hexadecimal (`0x100`) or decimal (`256`) 
 Program a standard ID range to bxCAN hardware:
 
 ```bash
-canfilter 0x100-0x1FF -o bxcan
+canfilter 0x100-0x1FF -o bxcan_f0
 ```
 
 Program mixed standard and extended IDs to FDCAN:
@@ -61,17 +61,19 @@ canfilter 0x100 0x200-0x2FF 0x1000 -o fdcan_g0 -v
 Print bxcan registers without programming hardware:
 
 ```
-canfilter -o bxcan -d -v -v -v 0x1000-0x1fff
+canfilter -o bxcan_f0 -d -v -v -v 0x1000-0x1fff
 ```
 
 ## HARDWARE
 
 STM32 with support for CANBUS classic or CAN FD.
 
-- CANBUS classic: bxcan
+- CANBUS classic:
+    - bxcan_f0 (STM32F0, F1, F3, L1, L4: single CAN with 14 filter registers)
+    - bxcan_f4 (STM32F4, F7: dual CAN with 28 filter registers)
 - CAN FD:
-    - low end: fdcan_g0 (STM32G0: 28 standard + 8 extended filters)
-    - high end: fdcan_h7 (STM32H7: 128 standard + 64 extended filters)
+    - fdcan_g0 (STM32G0: 28 standard + 8 extended filters)
+    - fdcan_h7 (STM32H7: 128 standard + 64 extended filters)
 
 ## ERROR CODES
 

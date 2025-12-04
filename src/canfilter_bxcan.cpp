@@ -10,8 +10,8 @@
  * - Single IDs become exact match filters (mask = 0x7FF or 0x1FFFFFFF)
  *
  * bxCAN Filter Limitations:
- * - Maximum 14 filter banks for single bxCAN
- * - Maximum 28 filter banks for dual bxCAN
+ * - Maximum 14 filter banks for STM32F0/F1/F3
+ * - Maximum 28 filter banks for STM32F4/F7
  * - Each bank can hold:
  *   - 4 standard id's (list mode)
  *   - or 2 standard masks (mask mode)
@@ -29,9 +29,9 @@ template <uint8_t max_banks_t, uint8_t dev_val> canfilter_bxcan<max_banks_t, dev
     // no additional initialization code needed
 }
 
-/* Constructor implementations for bxcan1 and bxcan2 */
-canfilter_bxcan1::canfilter_bxcan1() : canfilter_bxcan<14, CANFILTER_DEV_BXCAN>() {}
-canfilter_bxcan2::canfilter_bxcan2() : canfilter_bxcan<28, CANFILTER_DEV_BXCAN2>() {}
+/* Constructor implementations for bxcan_f0 and bxcan_f4 */
+canfilter_bxcan_f0::canfilter_bxcan_f0() : canfilter_bxcan<14, CANFILTER_DEV_BXCAN_F0>() {}
+canfilter_bxcan_f4::canfilter_bxcan_f4() : canfilter_bxcan<28, CANFILTER_DEV_BXCAN_F4>() {}
 
 /* filter emission functions - one for each of four types */
 
@@ -424,6 +424,6 @@ template <uint8_t max_banks_t, uint8_t dev_val> void canfilter_bxcan<max_banks_t
     return;
 }
 
-// Explicit template instantiation for bxcan1 and bxcan2
-template class canfilter_bxcan<14, CANFILTER_DEV_BXCAN>;
-template class canfilter_bxcan<28, CANFILTER_DEV_BXCAN2>;
+// Explicit template instantiation for bxcan_f0 and bxcan_f4
+template class canfilter_bxcan<14, CANFILTER_DEV_BXCAN_F0>;
+template class canfilter_bxcan<28, CANFILTER_DEV_BXCAN_F4>;

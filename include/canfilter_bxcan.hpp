@@ -12,7 +12,7 @@ template <uint8_t max_banks_t, uint8_t dev_val> class canfilter_bxcan : public c
 
     // Hardware configuration struct (nested)
     struct hw_t {
-        uint8_t dev; // CANFILTER_DEV_BXCAN or CANFILTER_DEV_BXCAN2
+        uint8_t dev; // CANFILTER_DEV_BXCAN_F0 or CANFILTER_DEV_BXCAN_F4
         uint8_t reserved[3];
         uint32_t fs1r;
         uint32_t fm1r;
@@ -79,14 +79,14 @@ template <uint8_t max_banks_t, uint8_t dev_val> class canfilter_bxcan : public c
     canfilter_error_t add_ext_mask(uint32_t id, uint32_t mask);
 };
 
-// Single bxCAN specific implementation (14 banks)
-class canfilter_bxcan1 : public canfilter_bxcan<14, CANFILTER_DEV_BXCAN> {
+// bxCAN for STM32F0/F1/F3 (14 banks)
+class canfilter_bxcan_f0 : public canfilter_bxcan<14, CANFILTER_DEV_BXCAN_F0> {
   public:
-    canfilter_bxcan1();
+    canfilter_bxcan_f0();
 };
 
-// Dual bxCAN specific implementation (28 banks)
-class canfilter_bxcan2 : public canfilter_bxcan<28, CANFILTER_DEV_BXCAN2> {
+// bxCAN for STM32F4/F7 (28 banks)
+class canfilter_bxcan_f4 : public canfilter_bxcan<28, CANFILTER_DEV_BXCAN_F4> {
   public:
-    canfilter_bxcan2();
+    canfilter_bxcan_f4();
 };

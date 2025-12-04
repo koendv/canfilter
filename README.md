@@ -23,31 +23,36 @@ IDs: Single CAN IDs (0x100, 256, 0x1000)
 
 RANGES: CAN ID ranges (0x100-0x1FF, 256-511, 0x1000-0x1FFF)
 
-| Short   | Long          | Description                                |
-| ------- | ------------- | ------------------------------------------ |
-| -o MODE | --output MODE | Set output mode: bxcan, fdcan_g0, fdcan_h7 |
-| -a      | --allow-all   | Allow all packets                          |
-| -v      | --verbose     | Enable verbose output                      |
-| -h      | --help        | Show this help                             |
+| Short   | Long          | Description                                        |
+| ------- | ------------- | -------------------------------------------------- |
+| -o MODE | --output MODE | Set output mode: bxcan_f0, bxcan_f4, fdcan_g0, fdcan_h7 |
+| -a      | --allow-all   | Allow all packets                                  |
+| -v      | --verbose     | Enable verbose output                              |
+| -h      | --help        | Show this help                                     |
 
 
 - Single IDs are interpreted as standard if <= 0x7FF, extended if <= 0x1FFFFFFF.
 - Hex numbers are supported (prefix `0x`).
 - Ranges are interpreted as extended if lower or upper bound is an extended ID.
 - Repeating -v up to three times results in more verbose output.
+- CAN controllers for --output :
+    - bxcan_f0: single classic CAN controller, 14 filter banks.
+    - bxcan_f4: dual classic CAN controller, 28 filter banks.
+    - fdcan_g0: CAN FD controller, 28 standard filters, 8 extended filters.
+    - fdcan_h7: CAN FD controller, 128 standard filters, 28 extended filters.
 
 ## Examples
 
 Allow a single standard ID:
 
 ```
-canfilter 0x100 -o bxcan
+canfilter 0x100 -o bxcan_f0
 ```
 
 Program a standard ID range to bxCAN hardware:
 
 ```bash
-canfilter 0x100-0x1FF -o bxcan
+canfilter 0x100-0x1FF -o bxcan_f0
 ```
 
 Program mixed standard and extended IDs to FDCAN:
@@ -59,7 +64,7 @@ canfilter 0x100 0x200-0x2FF 0x1000 -o fdcan_g0 -v
 Print bxcan registers without programming hardware:
 
 ```
-canfilter -o bxcan -d -v -v -v 0x1000-0x1fff
+canfilter -o bxcan_f0 -d -v -v -v 0x1000-0x1fff
 ```
 
 ## FDCAN and BXCAN comparison
@@ -82,7 +87,7 @@ This method is efficient and uses minimal resources.
 In contrast, BXCAN uses mask-based filtering, meaning you cannot directly filter a range of CAN IDs. Instead, BXCAN breaks the range into a set of IDs with corresponding masks. This results in more filters being needed for the same range. For instance, filtering the range 0x101-0x1fe involves multiple filter IDs and masks:
 
 ```
-$ canfilter -o bxcan 0x101-0x1fe
+$ canfilter -o bxcan_f0 0x101-0x1fe
 Filter usage: 7/14 (50%)
 ```
 
@@ -97,10 +102,10 @@ For example:
 - Filtering the range 0x101-0x1fe on BXCAN uses 50% of the filter capacity, while FDCAN uses only 4%.
 - Filtering the range 0x100-0x1ff on BXCAN uses 7%, whereas FDCAN uses 4%.
 
-|range       |bxcan |fdcan_g0 |
-| ---------- | ---- | ------- |
-|0x101-0x1fe |50%   |4%       |
-|0x100-0x1ff |7%    |4%       |
+|range       |bxcan_f0 |fdcan_g0 |
+| ---------- | ------- | ------- |
+|0x101-0x1fe |50%      |4%       |
+|0x100-0x1ff |7%       |4%       |
 
 BXCAN performs best when the range is a power of two and begins on a power-of-two boundary. If you find yourself running out of filter banks on BXCAN, consider adjusting your filters to fit these optimal conditions.
 
