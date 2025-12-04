@@ -186,12 +186,12 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::add_
 // Debug print function: Show configuration (e.g., filter registers)
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print_reg() const {
-    std::cout << "fd-can registers:\n";
-    std::cout << "standard filters:\n";
+    std::cout << "\nfd-can registers:\n";
+    std::cout << std::format("standard filters: {}\n", hw_config.std_count);
     for (uint32_t i = 0; i < hw_config.std_count; ++i) {
         std::cout << std::format("sf[{:2d}]: 0x{:03x}\n", i, hw_config.std_filters[i]);
     }
-    std::cout << "Extended Filters:\n";
+    std::cout << std::format("extended filters: {}\n", hw_config.ext_count);
     for (uint32_t i = 0; i < hw_config.ext_count; ++i) {
         std::cout << std::format("ef[{:2d}]: 0x{:08x}\n", i, hw_config.ext_filters[i]);
     }
@@ -202,7 +202,7 @@ void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print() con
     static const char *ft_str[4] = {"range", "dual", "mask", "off"};
     static const char *fec_str[8] = {"off", "fifo0", "fifo1", "reject", "prio", "prio fifo0", "prio fifo1", "not used"};
 
-    std::cout << "fdcan debug:\n";
+    std::cout << "\nfdcan debug:\n";
     for (uint32_t i = 0; i < hw_config.std_count; ++i) {
         uint32_t sfid1 = (hw_config.std_filters[i] >> 16) & max_std_id;
         uint32_t sfid2 = (hw_config.std_filters[i] & max_std_id);

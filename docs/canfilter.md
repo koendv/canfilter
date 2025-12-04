@@ -58,10 +58,10 @@ Program mixed standard and extended IDs to FDCAN:
 canfilter 0x100 0x200-0x2FF 0x1000 -o fdcan_g0 -v
 ```
 
-Perform a dry run without programming hardware:
+Print bxcan registers without programming hardware:
 
-```bash
-canfilter 0x101-0x1FE -o bxcan --dry-run -v
+```
+canfilter -o bxcan -d -v -v -v 0x1000-0x1fff
 ```
 
 ## HARDWARE

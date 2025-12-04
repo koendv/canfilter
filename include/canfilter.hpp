@@ -27,8 +27,8 @@ class canfilter {
     uint8_t verbose = 0; // Verbosity level (0 = no output, 1 = verbose)
 
     // Maximum IDs
-    static constexpr uint32_t max_std_id = 0x7FF;      // Standard CAN
-    static constexpr uint32_t max_ext_id = 0x1FFFFFFF; // Extended CAN
+    static constexpr uint32_t max_std_id = 0x7FFU;      // Standard CAN
+    static constexpr uint32_t max_ext_id = 0x1FFFFFFFU; // Extended CAN
 
     virtual ~canfilter() = default;
 

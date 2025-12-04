@@ -41,7 +41,7 @@ canfilter_error_t canfilter_bxcan::emit_std_list(uint32_t id1, uint32_t id2, uin
 
     /* Configure bank as 16-bit list mode */
     hw_config.fs1r &= ~(1 << bank); /* 16-bit */
-    hw_config.fm1r &= ~(1 << bank); /* List mode */
+    hw_config.fm1r |= (1 << bank);  /* List mode */
     hw_config.fa1r |= (1 << bank);  /* Enable */
 
     bank++;
@@ -65,7 +65,7 @@ canfilter_error_t canfilter_bxcan::emit_std_mask(uint32_t id1, uint32_t mask1, u
 
     /* Configure bank as 16-bit list mode */
     hw_config.fs1r &= ~(1 << bank); /* 16-bit */
-    hw_config.fm1r |= (1 << bank);  /* Mask mode */
+    hw_config.fm1r &= ~(1 << bank); /* Mask mode */
     hw_config.fa1r |= (1 << bank);  /* Enable */
 
     bank++;
@@ -81,16 +81,16 @@ canfilter_error_t canfilter_bxcan::emit_ext_list(uint32_t id1, uint32_t id2) {
     if (id1 > max_ext_id || id2 > max_ext_id)
         return CANFILTER_ERROR_PARAM;
 
-    uint32_t fr1 = (id1 << 3);
-    uint32_t fr2 = (id2 << 3);
+    uint32_t fr1 = (id1 << 3) | (0x1U << 2);
+    uint32_t fr2 = (id2 << 3) | (0x1U << 2);
 
     hw_config.fr1[bank] = fr1;
     hw_config.fr2[bank] = fr2;
 
     /* Configure bank as 32-bit list mode */
-    hw_config.fs1r |= (1 << bank);  /* 32-bit */
-    hw_config.fm1r &= ~(1 << bank); /* List mode */
-    hw_config.fa1r |= (1 << bank);  /* Enable */
+    hw_config.fs1r |= (1 << bank); /* 32-bit */
+    hw_config.fm1r |= (1 << bank); /* List mode */
+    hw_config.fa1r |= (1 << bank); /* Enable */
 
     bank++;
 
@@ -105,16 +105,16 @@ canfilter_error_t canfilter_bxcan::emit_ext_mask(uint32_t id1, uint32_t mask1) {
     if (id1 > max_ext_id || mask1 > max_ext_id)
         return CANFILTER_ERROR_PARAM;
 
-    uint32_t fr1 = (id1 << 3);
+    uint32_t fr1 = (id1 << 3) | (0x1U << 2);
     uint32_t fr2 = (mask1 << 3);
 
     hw_config.fr1[bank] = fr1;
     hw_config.fr2[bank] = fr2;
 
     /* Configure bank as 32-bit mask mode */
-    hw_config.fs1r |= (1 << bank); /* 32-bit */
-    hw_config.fm1r |= (1 << bank); /* mask mode */
-    hw_config.fa1r |= (1 << bank); /* Enable */
+    hw_config.fs1r |= (1 << bank);  /* 32-bit */
+    hw_config.fm1r &= ~(1 << bank); /* mask mode */
+    hw_config.fa1r |= (1 << bank);  /* Enable */
 
     bank++;
 
@@ -332,7 +332,7 @@ canfilter_error_t canfilter_bxcan::add_ext_id(uint32_t id) {
 }
 
 void canfilter_bxcan::debug_print_reg() const {
-    std::cout << "bxcan registers:\n";
+    std::cout << "\nbxcan registers:\n";
 
     std::cout << std::format("FS1R:  0x{:08x}\n", hw_config.fs1r);
     std::cout << std::format("FM1R:  0x{:08x}\n", hw_config.fm1r);
@@ -344,37 +344,39 @@ void canfilter_bxcan::debug_print_reg() const {
         uint32_t r1 = hw_config.fr1[i];
         uint32_t r2 = hw_config.fr2[i];
         if (r1 != 0 || r2 != 0)
-            std::cout << std::format("bank[{:2d}]: fr1: 0x{:08x} fr2: 0x{:08x}\n", i, r1, r2);
+            std::cout << std::format("FR1[{:2d}]: 0x{:08x} FR2[{:2d}]: 0x{:08x}\n", i, r1, i, r2);
     }
 }
 
 void canfilter_bxcan::debug_print() const {
-    std::cout << "bxcan debug:\n";
+    std::cout << "\nbxcan debug:\n";
     for (int i = 0; i < max_banks; i++) {
         bool is_active = hw_config.fa1r & (1 << i);
         if (!is_active)
             continue;
         std::cout << std::format("bank [{:2d}]: ", i);
         bool is_32bit = hw_config.fs1r & (1 << i);
-        bool is_mask = hw_config.fm1r & (1 << i);
+        bool is_list = hw_config.fm1r & (1 << i);
         if (is_32bit) {
             uint32_t id1 = (hw_config.fr1[i] >> 3) & max_ext_id;
             uint32_t id2 = (hw_config.fr2[i] >> 3) & max_ext_id;
-            if (is_mask) {
+            if (is_list) {
+                std::cout << std::format("ext list 0x{:08x}, 0x{:08x}\n", id1, id2);
+            } else {
                 uint32_t base1 = id1;
                 uint32_t mask1 = id2;
                 uint32_t begin1 = base1 & mask1;
                 uint32_t end1 = (begin1 | ~mask1) & max_ext_id;
                 std::cout << std::format("ext mask 0x{:08x}-0x{:08x}\n", begin1, end1);
-            } else {
-                std::cout << std::format("ext list 0x{:08x}, 0x{:08x}\n", id1, id2);
             }
         } else {
             uint32_t id1 = (hw_config.fr1[i] >> 5) & max_std_id;
             uint32_t id2 = (hw_config.fr1[i] >> 21) & max_std_id;
             uint32_t id3 = (hw_config.fr2[i] >> 5) & max_std_id;
             uint32_t id4 = (hw_config.fr2[i] >> 21) & max_std_id;
-            if (is_mask) {
+            if (is_list) {
+                std::cout << std::format("std list 0x{:03x}, 0x{:03x}, 0x{:03x}, 0x{:03x}\n", id1, id2, id3, id4);
+            } else {
                 uint32_t base1 = id1;
                 uint32_t mask1 = id2;
                 uint32_t begin1 = base1 & mask1;
@@ -384,8 +386,6 @@ void canfilter_bxcan::debug_print() const {
                 uint32_t begin2 = base2 & mask2;
                 uint32_t end2 = (begin2 | ~mask2) & max_std_id;
                 std::cout << std::format("std mask 0x{:03x}-0x{:03x}, 0x{:03x}-0x{:03x}\n", base1, end1, base2, end2);
-            } else {
-                std::cout << std::format("std list 0x{:03x}, 0x{:03x}, 0x{:03x}, 0x{:03x}\n", id1, id2, id3, id4);
             }
         }
     }
