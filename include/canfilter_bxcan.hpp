@@ -4,15 +4,15 @@
 #include <cstdint>
 #include <cstring>
 
-/* bxCAN filter class */
-class canfilter_bxcan : public canfilter {
+/* bxCAN filter template class */
+template <uint8_t max_banks_t, uint8_t dev_val> class canfilter_bxcan : public canfilter {
   public:
-    // Maximum number of bxCAN filter banks
-    static constexpr uint8_t max_banks = 14;
+    // Maximum number of bxCAN filter banks (template parameter)
+    static constexpr uint8_t max_banks = max_banks_t;
 
     // Hardware configuration struct (nested)
     struct hw_t {
-        uint8_t dev; // CANFILTER_DEV_BXCAN = 0
+        uint8_t dev; // CANFILTER_DEV_BXCAN or CANFILTER_DEV_BXCAN2
         uint8_t reserved[3];
         uint32_t fs1r;
         uint32_t fm1r;
@@ -29,6 +29,7 @@ class canfilter_bxcan : public canfilter {
 
     hw_t hw_config;
 
+    canfilter_bxcan();
     void begin() override;
     canfilter_error_t end() override;
     canfilter_error_t program() const override;
@@ -76,4 +77,16 @@ class canfilter_bxcan : public canfilter {
     canfilter_error_t add_std_mask(uint32_t id, uint32_t mask);
     canfilter_error_t add_ext_list(uint32_t id);
     canfilter_error_t add_ext_mask(uint32_t id, uint32_t mask);
+};
+
+// Single bxCAN specific implementation (14 banks)
+class canfilter_bxcan1 : public canfilter_bxcan<14, CANFILTER_DEV_BXCAN> {
+  public:
+    canfilter_bxcan1();
+};
+
+// Dual bxCAN specific implementation (28 banks)
+class canfilter_bxcan2 : public canfilter_bxcan<28, CANFILTER_DEV_BXCAN2> {
+  public:
+    canfilter_bxcan2();
 };

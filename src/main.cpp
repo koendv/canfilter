@@ -13,7 +13,7 @@ void print_help(const char *prog_name) {
               << "IDs: Single CAN IDs (0x100, 256, 0x1000)\n"
               << "RANGES: CAN ID ranges (0x100-0x1FF, 256-511, 0x1000-0x1FFF)\n\n"
               << "Options:\n"
-              << "  -o, --output MODE      Output mode: bxcan, fdcan_g0, fdcan_h7\n"
+              << "  -o, --output MODE      Output mode: bxcan, bxcan2, fdcan_g0, fdcan_h7\n"
               << "  -a, --allow-all        Allow all packets\n"
               << "  -v, --verbose          Enable verbose output\n"
               << "  -d, --dry-run          Do not program hardware; just print filter configuration\n"
@@ -81,7 +81,9 @@ bool canfilter_cli(int argc, char *argv[]) {
 
     // create canbus filter
     if (output_mode == "bxcan") {
-        filter = std::make_unique<canfilter_bxcan>();
+        filter = std::make_unique<canfilter_bxcan1>();
+    } else if (output_mode == "bxcan2") {
+        filter = std::make_unique<canfilter_bxcan2>();
     } else if (output_mode == "fdcan_g0") {
         filter = std::make_unique<canfilter_fdcan_g0>();
     } else if (output_mode == "fdcan_h7") {

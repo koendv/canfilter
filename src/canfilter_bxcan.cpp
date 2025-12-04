@@ -10,7 +10,8 @@
  * - Single IDs become exact match filters (mask = 0x7FF or 0x1FFFFFFF)
  *
  * bxCAN Filter Limitations:
- * - Maximum 14 filter banks
+ * - Maximum 14 filter banks for single bxCAN
+ * - Maximum 28 filter banks for dual bxCAN
  * - Each bank can hold:
  *   - 4 standard id's (list mode)
  *   - or 2 standard masks (mask mode)
@@ -23,10 +24,21 @@
 #include <format>
 #include <iomanip>
 
+/* Constructor */
+template <uint8_t max_banks_t, uint8_t dev_val> canfilter_bxcan<max_banks_t, dev_val>::canfilter_bxcan() {
+    // no additional initialization code needed
+}
+
+/* Constructor implementations for bxcan1 and bxcan2 */
+canfilter_bxcan1::canfilter_bxcan1() : canfilter_bxcan<14, CANFILTER_DEV_BXCAN>() {}
+canfilter_bxcan2::canfilter_bxcan2() : canfilter_bxcan<28, CANFILTER_DEV_BXCAN2>() {}
+
 /* filter emission functions - one for each of four types */
 
 /* Pack 4 std list filters into one bank (16-bit list mode) */
-canfilter_error_t canfilter_bxcan::emit_std_list(uint32_t id1, uint32_t id2, uint32_t id3, uint32_t id4) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::emit_std_list(uint32_t id1, uint32_t id2, uint32_t id3,
+                                                                       uint32_t id4) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
@@ -50,7 +62,9 @@ canfilter_error_t canfilter_bxcan::emit_std_list(uint32_t id1, uint32_t id2, uin
 }
 
 /* Pack 2 std mask filters into one bank (16-bit mask mode) */
-canfilter_error_t canfilter_bxcan::emit_std_mask(uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::emit_std_mask(uint32_t id1, uint32_t mask1, uint32_t id2,
+                                                                       uint32_t mask2) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
@@ -74,7 +88,8 @@ canfilter_error_t canfilter_bxcan::emit_std_mask(uint32_t id1, uint32_t mask1, u
 }
 
 /* Pack 2 ext list filters into one bank (32-bit list mode) */
-canfilter_error_t canfilter_bxcan::emit_ext_list(uint32_t id1, uint32_t id2) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::emit_ext_list(uint32_t id1, uint32_t id2) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
@@ -98,7 +113,8 @@ canfilter_error_t canfilter_bxcan::emit_ext_list(uint32_t id1, uint32_t id2) {
 }
 
 /* Pack 1 ext mask filter into one bank (32-bit list mode) */
-canfilter_error_t canfilter_bxcan::emit_ext_mask(uint32_t id1, uint32_t mask1) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::emit_ext_mask(uint32_t id1, uint32_t mask1) {
     if (bank >= max_banks)
         return CANFILTER_ERROR_FULL;
 
@@ -122,7 +138,8 @@ canfilter_error_t canfilter_bxcan::emit_ext_mask(uint32_t id1, uint32_t mask1) {
 }
 
 /* Add to std/ext list/mask */
-canfilter_error_t canfilter_bxcan::add_std_list(uint32_t id) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_std_list(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
     if (std_list_count > 3)
@@ -141,7 +158,8 @@ canfilter_error_t canfilter_bxcan::add_std_list(uint32_t id) {
     return err;
 }
 
-canfilter_error_t canfilter_bxcan::add_std_mask(uint32_t id, uint32_t mask) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_std_mask(uint32_t id, uint32_t mask) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
     if (std_mask_count > 1)
@@ -160,7 +178,8 @@ canfilter_error_t canfilter_bxcan::add_std_mask(uint32_t id, uint32_t mask) {
     return err;
 }
 
-canfilter_error_t canfilter_bxcan::add_ext_list(uint32_t id) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_ext_list(uint32_t id) {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
     if (ext_list_count > 1)
@@ -177,12 +196,14 @@ canfilter_error_t canfilter_bxcan::add_ext_list(uint32_t id) {
     return err;
 }
 
-canfilter_error_t canfilter_bxcan::add_ext_mask(uint32_t id, uint32_t mask) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_ext_mask(uint32_t id, uint32_t mask) {
     return emit_ext_mask(id, mask);
 }
 
 /* CIDR aggregation code */
-int canfilter_bxcan::std_largest_prefix(uint32_t begin, uint32_t end) const {
+template <uint8_t max_banks_t, uint8_t dev_val>
+int canfilter_bxcan<max_banks_t, dev_val>::std_largest_prefix(uint32_t begin, uint32_t end) const {
     int prefix = 11;
     while (prefix > 0) {
         uint32_t mask_bit = 1U << (11 - prefix);
@@ -200,7 +221,8 @@ int canfilter_bxcan::std_largest_prefix(uint32_t begin, uint32_t end) const {
     return prefix;
 }
 
-int canfilter_bxcan::ext_largest_prefix(uint32_t begin, uint32_t end) const {
+template <uint8_t max_banks_t, uint8_t dev_val>
+int canfilter_bxcan<max_banks_t, dev_val>::ext_largest_prefix(uint32_t begin, uint32_t end) const {
     int prefix = 29;
     while (prefix > 0) {
         uint32_t mask_bit = 1U << (29 - prefix);
@@ -218,16 +240,16 @@ int canfilter_bxcan::ext_largest_prefix(uint32_t begin, uint32_t end) const {
     return prefix;
 }
 
-void canfilter_bxcan::begin() {
+template <uint8_t max_banks_t, uint8_t dev_val> void canfilter_bxcan<max_banks_t, dev_val>::begin() {
     std_list_count = 0;
     std_mask_count = 0;
     ext_list_count = 0;
     bank = 0;
     hw_config = hw_t(); // zero out
-    hw_config.dev = CANFILTER_DEV_BXCAN;
+    hw_config.dev = dev_val;
 }
 
-canfilter_error_t canfilter_bxcan::end() {
+template <uint8_t max_banks_t, uint8_t dev_val> canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::end() {
     canfilter_error_t err = CANFILTER_SUCCESS;
 
     if (std_list_count != 0)
@@ -242,12 +264,14 @@ canfilter_error_t canfilter_bxcan::end() {
     return err;
 }
 
-canfilter_error_t canfilter_bxcan::program() const {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::program() const {
     bool retval = canfilter_send_usb(&hw_config, sizeof(hw_config));
     return retval ? CANFILTER_SUCCESS : CANFILTER_ERROR_PLATFORM;
 }
 
-canfilter_error_t canfilter_bxcan::add_std_range(uint32_t begin, uint32_t end) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_std_range(uint32_t begin, uint32_t end) {
     canfilter_error_t err;
 
     if (begin > max_std_id || end > max_std_id)
@@ -285,7 +309,8 @@ canfilter_error_t canfilter_bxcan::add_std_range(uint32_t begin, uint32_t end) {
     return CANFILTER_SUCCESS;
 }
 
-canfilter_error_t canfilter_bxcan::add_ext_range(uint32_t begin, uint32_t end) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_ext_range(uint32_t begin, uint32_t end) {
     canfilter_error_t err;
 
     if (begin > max_ext_id || end > max_ext_id)
@@ -323,15 +348,17 @@ canfilter_error_t canfilter_bxcan::add_ext_range(uint32_t begin, uint32_t end) {
     return CANFILTER_SUCCESS;
 }
 
-canfilter_error_t canfilter_bxcan::add_std_id(uint32_t id) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_std_id(uint32_t id) {
     return add_std_range(id, id);
 }
 
-canfilter_error_t canfilter_bxcan::add_ext_id(uint32_t id) {
+template <uint8_t max_banks_t, uint8_t dev_val>
+canfilter_error_t canfilter_bxcan<max_banks_t, dev_val>::add_ext_id(uint32_t id) {
     return add_ext_range(id, id);
 }
 
-void canfilter_bxcan::debug_print_reg() const {
+template <uint8_t max_banks_t, uint8_t dev_val> void canfilter_bxcan<max_banks_t, dev_val>::debug_print_reg() const {
     std::cout << "\nbxcan registers:\n";
 
     std::cout << std::format("FS1R:  0x{:08x}\n", hw_config.fs1r);
@@ -348,7 +375,7 @@ void canfilter_bxcan::debug_print_reg() const {
     }
 }
 
-void canfilter_bxcan::debug_print() const {
+template <uint8_t max_banks_t, uint8_t dev_val> void canfilter_bxcan<max_banks_t, dev_val>::debug_print() const {
     std::cout << "\nbxcan debug:\n";
     for (int i = 0; i < max_banks; i++) {
         bool is_active = hw_config.fa1r & (1 << i);
@@ -391,8 +418,12 @@ void canfilter_bxcan::debug_print() const {
     }
 }
 
-void canfilter_bxcan::print_usage() const {
+template <uint8_t max_banks_t, uint8_t dev_val> void canfilter_bxcan<max_banks_t, dev_val>::print_usage() const {
     uint32_t percent = (bank * 100 + max_banks / 2) / max_banks;
     std::cout << std::format("Filter usage: {}/{} ({}%)\n", bank, max_banks, percent);
     return;
 }
+
+// Explicit template instantiation for bxcan1 and bxcan2
+template class canfilter_bxcan<14, CANFILTER_DEV_BXCAN>;
+template class canfilter_bxcan<28, CANFILTER_DEV_BXCAN2>;
