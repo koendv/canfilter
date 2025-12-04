@@ -38,16 +38,28 @@ RANGES: CAN ID ranges (0x100-0x1FF, 256-511, 0x1000-0x1FFF)
 
 ## Examples
 
-Add a single standard ID:
+Allow a single standard ID:
 
 ```
 canfilter 0x100 -o bxcan
 ```
 
-Add multiple IDs and ranges for bxCAN:
+Program a standard ID range to bxCAN hardware:
+
+```bash
+canfilter 0x100-0x1FF -o bxcan
+```
+
+Program mixed standard and extended IDs to FDCAN:
+
+```bash
+canfilter 0x100 0x200-0x2FF 0x1000 -o fdcan_g0 -v
+```
+
+Print bxcan registers without programming hardware:
 
 ```
-canfilter 0x100-0x1FF 0x1ABCDE -o bxcan
+canfilter -o bxcan -d -v -v -v 0x1000-0x1fff
 ```
 
 ## FDCAN and BXCAN comparison
