@@ -1,4 +1,4 @@
-commit 9172cde92e0665f76612962e47e61211b9eeca82
+commit cb7e9d109bef77145e0897e9733afb2616b80b6f
 Author: Koen De Vleeschauwer <kdv@kdvelectronics.eu>
 Date:   Mon Nov 17 08:23:44 2025 +0100
 
@@ -29,30 +29,48 @@ index b93cc8f..855716b 100644
 +
  #endif /* _LINUXKPI_LINUX_COMPILER_H_ */
 diff --git a/include/gs_usb.h b/include/gs_usb.h
-index 1d1a616..37e2dac 100644
+index 1d1a616..91cb325 100644
 --- a/include/gs_usb.h
 +++ b/include/gs_usb.h
-@@ -313,3 +313,21 @@ struct gs_host_frame {
+@@ -174,8 +174,8 @@ enum gs_usb_breq {
+ 	GS_USB_BREQ_DEVICE_CONFIG,
+ 	GS_USB_BREQ_TIMESTAMP,
+ 	GS_USB_BREQ_IDENTIFY,
+-	GS_USB_BREQ_GET_USER_ID,    //not implemented
+-	GS_USB_BREQ_SET_USER_ID,    //not implemented
++	GS_USB_BREQ_GET_USER_ID,    // repurposed. now gets CANBUS filter info.
++	GS_USB_BREQ_SET_USER_ID,    // repurposed. now sets CANBUS filter.
+ 	GS_USB_BREQ_DATA_BITTIMING,
+ 	GS_USB_BREQ_BT_CONST_EXT,
+ 	GS_USB_BREQ_SET_TERMINATION,
+@@ -313,3 +313,28 @@ struct gs_host_frame {
  		DECLARE_FLEX_ARRAY(struct canfd_ts,		  canfd_ts);
  	};
  } __packed __aligned(4);
 +
-+// gs_usb filter protocol
++// gs_usb filter protocol: answer to repurposed GET_USER_ID
 +
-+#define CANFILTER_MAX_HW_FILTERS 14
++#define CANFILTER_DEV_BXCAN_F0 1 /* bxcan, 14 filters */
 +
-+// hardware filter structure
++struct gs_filter_info {
++	uint8_t dev;     /* device, CANFILTER_DEV_BXCAN_F0 for bxcan with 14 registers */
++	uint8_t reserved[3];
++}  __packed __aligned(4);
++
++extern const struct gs_filter_info CAN_filter_info;
++
++// hardware filter structure: contents of repurposed SET_USER_ID
 +
 +struct gs_device_filter {
-+	uint8_t dev; /* device, 0 for bxcan */
++	uint8_t dev; /* device, CANFILTER_DEV_BXCAN for bxcan with 14 registers */
 +	uint8_t reserved[3];
 +	uint32_t fs1r;
 +	uint32_t fm1r;
 +	uint32_t ffa1r;
 +	uint32_t fa1r;
-+	uint32_t fr1[CANFILTER_MAX_HW_FILTERS];
-+	uint32_t fr2[CANFILTER_MAX_HW_FILTERS];
-+} __attribute__((packed)) __attribute__((aligned(4)));
++	uint32_t fr1[14];
++	uint32_t fr2[14];
++} __packed __aligned(4);
 +
 diff --git a/include/usbd_gs_can.h b/include/usbd_gs_can.h
 index 5de535b..849dfd1 100644
@@ -72,10 +90,18 @@ index 5de535b..849dfd1 100644
  #ifdef CONFIG_CANFD
  #define CAN_DATA_MAX_PACKET_SIZE 64    /* Endpoint IN & OUT Packet size */
 diff --git a/src/can/bxcan.c b/src/can/bxcan.c
-index 7c72ab8..8e43a9d 100644
+index 7c72ab8..8c43a5f 100644
 --- a/src/can/bxcan.c
 +++ b/src/can/bxcan.c
-@@ -39,7 +39,8 @@ const struct gs_device_bt_const CAN_btconst = {
+@@ -24,6 +24,7 @@
+ 
+  */
+ 
++#include <string.h>
+ #include "can.h"
+ #include "config.h"
+ #include "device.h"
+@@ -39,7 +40,8 @@ const struct gs_device_bt_const CAN_btconst = {
  		GS_CAN_FEATURE_ONE_SHOT |
  		GS_CAN_FEATURE_HW_TIMESTAMP |
  		GS_CAN_FEATURE_IDENTIFY |
@@ -85,13 +111,36 @@ index 7c72ab8..8e43a9d 100644
  #ifdef TERM_Pin
  		| GS_CAN_FEATURE_TERMINATION
  #endif
-@@ -96,6 +97,54 @@ void can_set_bittiming(can_data_t *channel, const struct gs_device_bittiming *ti
+@@ -57,6 +59,22 @@ const struct gs_device_bt_const CAN_btconst = {
+ 	},
+ };
+ 
++
++const struct gs_filter_info CAN_filter_info = {
++	.dev = CANFILTER_DEV_BXCAN_F0,     /* bxcan, 14 registers */
++	.reserved = {0},
++};
++
++struct gs_device_filter filter = {
++	.dev = CANFILTER_DEV_BXCAN_F0, // BXCAN, 14 filter banks
++	.fs1r = 0x00000001,            // 32-bit for filter bank 0
++	.fm1r = 0x00000000,            // Mask mode for filter 0
++	.ffa1r = 0x00000000,           // Assign to FIFO 0
++	.fr1 = {0},                    // All IDs = 0
++	.fr2 = {0},                    // All masks = 0 (don't care)
++	.fa1r = 0x00000001             // Enable filter bank 0
++};
++
+ // The STM32F0 only has one CAN interface, define it as CAN1 as
+ // well, so it doesn't need to be handled separately.
+ #if !defined(CAN1) && defined(CAN)
+@@ -96,6 +114,74 @@ void can_set_bittiming(can_data_t *channel, const struct gs_device_bittiming *ti
  	channel->sjw = timing->sjw;
  }
  
-+bool can_set_filter(can_data_t *channel, const struct gs_device_filter *filter)
++bool can_apply_filter(can_data_t *channel)
 +{
-+	if (channel == NULL || filter == NULL)
++	if (channel == NULL)
 +		return false;
 +
 +	CAN_TypeDef* can = channel->instance;
@@ -99,39 +148,59 @@ index 7c72ab8..8e43a9d 100644
 +	if (can == NULL)
 +		return false;
 +
-+	// check filter is for bxcan, not fdcan
-+	if (filter->dev != 0) {
-+		return false;
-+	}
-+
-+	// disable interrupt
-+	bool was_irq_enabled = disable_irq();
-+
 +	// disable filter configuration
 +	can->FMR |= CAN_FMR_FINIT;
 +
++	// use all filter banks for CAN1
++	can->FMR &= ~CAN_FMR_CAN2SB;
++
++	// disable filters
++	can->FA1R = 0x0;
++
 +	// set filter scale (16-bit vs 32-bit)
-+	can->FS1R = filter->fs1r;
++	can->FS1R = filter.fs1r;
 +
 +	// set filter mode (mask vs list)
-+	can->FM1R = filter->fm1r;
-+
-+	// copy filter registers
-+	for (uint32_t bank = 0; bank < CANFILTER_MAX_HW_FILTERS; bank++) {
-+		can->sFilterRegister[bank].FR1 = filter->fr1[bank];
-+		can->sFilterRegister[bank].FR2 = filter->fr2[bank];
-+	}
++	can->FM1R = filter.fm1r;
 +
 +	// set fifo (fifo0 vs fifo1)
-+	can->FFA1R = filter->ffa1r;
++	can->FFA1R = filter.ffa1r;
 +
-+	// enable or disable filter banks
-+	can->FA1R = filter->fa1r;
++	// copy each FR1 and FR2
++	const uint32_t max_hw_filters = sizeof(filter.fr1)/sizeof(filter.fr1[0]);
++	for (uint32_t bank = 0; bank < max_hw_filters; bank++) {
++		can->sFilterRegister[bank].FR1 = filter.fr1[bank];
++		can->sFilterRegister[bank].FR2 = filter.fr2[bank];
++	}
 +
-+	// enable filter configuration
++	// enable filter banks
++	can->FA1R = filter.fa1r;
++
++	// Flush data
++	__DSB();
++
++	// exit filter configuration mode
 +	can->FMR &= ~CAN_FMR_FINIT;
 +
-+	// restore interrupt
++	return true;
++}
++
++bool can_set_filter(can_data_t *channel, const struct gs_device_filter *new_filter)
++{
++	if (channel == NULL || new_filter == NULL)
++		return false;
++
++	// check filter is for bxcan, not fdcan
++	if (new_filter->dev != CANFILTER_DEV_BXCAN_F0)
++		return false;
++
++	memcpy(&filter, &new_filter, sizeof(struct gs_device_filter));
++
++	bool was_enabled = can_is_enabled(channel);
++	bool was_irq_enabled = disable_irq();
++	can_init(channel, CAN_INTERFACE);
++	can_disable(channel);
++	if (was_enabled) can_enable(channel, GS_CAN_MODE_NORMAL);
 +	restore_irq(was_irq_enabled);
 +
 +	return true;
@@ -140,22 +209,62 @@ index 7c72ab8..8e43a9d 100644
  void can_enable(can_data_t *channel, uint32_t mode)
  {
  	CAN_TypeDef *can = channel->instance;
+@@ -123,8 +209,8 @@ void can_enable(can_data_t *channel, uint32_t mode)
+ 
+ 	// Reset CAN peripheral
+ 	can->MCR |= CAN_MCR_RESET;
+-	while ((can->MCR & CAN_MCR_RESET) != 0);                                                 // reset bit is set to zero after reset
+-	while ((can->MSR & CAN_MSR_SLAK) == 0);                                                // should be in sleep mode after reset
++	while ((can->MCR & CAN_MCR_RESET) != 0); // reset bit is set to zero after reset
++	while ((can->MSR & CAN_MSR_SLAK) == 0);  // should be in sleep mode after reset
+ 
+ 	// Completely reset while being of the bus
+ 	rcc_reset(can);
+@@ -135,9 +221,7 @@ void can_enable(can_data_t *channel, uint32_t mode)
+ 	can->MCR = mcr;
+ 	can->BTR = btr;
+ 
+-	can->MCR &= ~CAN_MCR_INRQ;
+-	while ((can->MSR & CAN_MSR_INAK) != 0);
+-
++#if 0
+ 	uint32_t filter_bit = 0x00000001;
+ 	can->FMR |= CAN_FMR_FINIT;
+ 	can->FMR &= ~CAN_FMR_CAN2SB;
+@@ -149,6 +233,12 @@ void can_enable(can_data_t *channel, uint32_t mode)
+ 	can->FFA1R &= ~filter_bit;       // assign filter 0 to FIFO 0
+ 	can->FA1R |= filter_bit;         // enable filter
+ 	can->FMR &= ~CAN_FMR_FINIT;
++#else
++	can_apply_filter(channel);
++#endif
++
++	can->MCR &= ~CAN_MCR_INRQ;
++	while ((can->MSR & CAN_MSR_INAK) != 0);
+ 
+ #ifdef nCANSTBY_Pin
+ 	HAL_GPIO_WritePin(nCANSTBY_Port, nCANSTBY_Pin, !GPIO_INIT_STATE(nCANSTBY_Active_High));
 diff --git a/src/usbd_gs_can.c b/src/usbd_gs_can.c
-index 4b61c65..e8c14b0 100644
+index 4b61c65..3aaa69f 100644
 --- a/src/usbd_gs_can.c
 +++ b/src/usbd_gs_can.c
-@@ -360,6 +360,10 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
+@@ -360,6 +360,15 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
  		case GS_USB_BREQ_DATA_BITTIMING:
  			len = sizeof(struct gs_device_bittiming);
  			break;
++		case GS_USB_BREQ_GET_USER_ID:
++			// Repurposes unimplemented command GET_USER_ID to get hardware filter info
++			src = &CAN_filter_info;
++			len = sizeof(CAN_filter_info);
++			break;
 +		case GS_USB_BREQ_SET_USER_ID:
-+			// Using unimplemented command SET_USER_ID for setting hardware filter
++			// Repurposes unimplemented command SET_USER_ID to set hardware filter
 +			len = sizeof(struct gs_device_filter);
 +			break;
  		case GS_USB_BREQ_BT_CONST_EXT:
  			src = &CAN_btconst_ext;
  			len = sizeof(CAN_btconst_ext);
-@@ -384,6 +388,7 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
+@@ -384,6 +393,7 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
  			len = sizeof(term_state);
  			break;
  		}
@@ -163,15 +272,23 @@ index 4b61c65..e8c14b0 100644
  		default:
  			goto out_fail;
  	}
-@@ -399,6 +404,7 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
+@@ -399,6 +409,7 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
  		case GS_USB_BREQ_IDENTIFY:
  		case GS_USB_BREQ_DATA_BITTIMING:
  		case GS_USB_BREQ_SET_TERMINATION:
-+		case GS_USB_BREQ_SET_USER_ID: // Hardware filter
++		case GS_USB_BREQ_SET_USER_ID: // Set hardware filter
  			if (req->wLength > sizeof(hcan->ep0_buf)) {
  				goto out_fail;
  			}
-@@ -564,6 +570,13 @@ static uint8_t USBD_GS_CAN_EP0_RxReady(USBD_HandleTypeDef *pdev) {
+@@ -413,6 +424,7 @@ static uint8_t USBD_GS_CAN_Config_Request(USBD_HandleTypeDef *pdev, USBD_SetupRe
+ 		case GS_USB_BREQ_TIMESTAMP:
+ 		case GS_USB_BREQ_BT_CONST_EXT:
+ 		case GS_USB_BREQ_GET_TERMINATION:
++		case GS_USB_BREQ_GET_USER_ID: // Get hardware filter info
+ 			USBD_CtlSendData(pdev, (uint8_t *)src, len);
+ 			break;
+ 		default:
+@@ -564,6 +576,13 @@ static uint8_t USBD_GS_CAN_EP0_RxReady(USBD_HandleTypeDef *pdev) {
  			}
  			break;
  		}
