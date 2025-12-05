@@ -1,4 +1,4 @@
-commit cb7e9d109bef77145e0897e9733afb2616b80b6f
+commit 3b2fa0922cac18e07413941cb9e082ec5318eb13
 Author: Koen De Vleeschauwer <kdv@kdvelectronics.eu>
 Date:   Mon Nov 17 08:23:44 2025 +0100
 
@@ -90,7 +90,7 @@ index 5de535b..849dfd1 100644
  #ifdef CONFIG_CANFD
  #define CAN_DATA_MAX_PACKET_SIZE 64    /* Endpoint IN & OUT Packet size */
 diff --git a/src/can/bxcan.c b/src/can/bxcan.c
-index 7c72ab8..8c43a5f 100644
+index 7c72ab8..74e7c83 100644
 --- a/src/can/bxcan.c
 +++ b/src/can/bxcan.c
 @@ -24,6 +24,7 @@
@@ -194,7 +194,7 @@ index 7c72ab8..8c43a5f 100644
 +	if (new_filter->dev != CANFILTER_DEV_BXCAN_F0)
 +		return false;
 +
-+	memcpy(&filter, &new_filter, sizeof(struct gs_device_filter));
++	memcpy(&filter, new_filter, sizeof(struct gs_device_filter));
 +
 +	bool was_enabled = can_is_enabled(channel);
 +	bool was_irq_enabled = disable_irq();
