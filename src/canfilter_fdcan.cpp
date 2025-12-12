@@ -38,65 +38,71 @@
 #define SFEC_RX_FIFO0 0x1U
 
 // EFT Extended Filter Type
-#define EFT_RANGE 0x0ULL
-#define EFT_DUAL 0x1ULL
+#define EFT_RANGE 0x0U
+#define EFT_DUAL 0x1U
 
 // EFEC Extended Filter Element Configuration
-#define EFEC_RX_FIFO0 0x1ULL
+#define EFEC_RX_FIFO0 0x1U
 
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_std_id(uint32_t id1, uint32_t id2) {
-    if (hw_config.std_count >= max_std_filter)
+    if (hw_config.std_filter_nbr >= max_std_filter)
         return CANFILTER_ERROR_FULL;
 
     if (id1 > max_std_id || id2 > max_std_id)
         return CANFILTER_ERROR_PARAM;
 
     uint32_t sfr = (SFT_DUAL << 30) | (SFEC_RX_FIFO0 << 27) | (id1 << 16) | id2;
-    hw_config.std_filters[hw_config.std_count++] = sfr;
+    hw_config.std_filter[hw_config.std_filter_nbr++] = sfr;
     return CANFILTER_SUCCESS;
 }
 
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_std_range(uint32_t id1, uint32_t id2) {
-    if (hw_config.std_count >= max_std_filter)
+    if (hw_config.std_filter_nbr >= max_std_filter)
         return CANFILTER_ERROR_FULL;
 
     if (id1 > max_std_id || id2 > max_std_id || id1 > id2)
         return CANFILTER_ERROR_PARAM;
 
     uint32_t sfr = (SFT_RANGE << 30) | (SFEC_RX_FIFO0 << 27) | (id1 << 16) | id2;
-    hw_config.std_filters[hw_config.std_count++] = sfr;
+    hw_config.std_filter[hw_config.std_filter_nbr++] = sfr;
     return CANFILTER_SUCCESS;
 }
 
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_ext_id(uint32_t id1, uint32_t id2) {
-    if (hw_config.ext_count >= max_ext_filter)
+    if (hw_config.ext_filter_nbr >= max_ext_filter)
         return CANFILTER_ERROR_FULL;
 
     if (id1 > max_ext_id || id2 > max_ext_id)
         return CANFILTER_ERROR_PARAM;
 
-    uint64_t efid1 = id1;
-    uint64_t efid2 = id2;
-    uint64_t efr = (EFEC_RX_FIFO0 << 61) | (efid1 << 32) | (EFT_DUAL << 30) | efid2;
-    hw_config.ext_filters[hw_config.ext_count++] = efr;
+    // Word 0: EFID1 (bits 28-0) + EFEC (bits 31-29)
+    hw_config.ext_filter[hw_config.ext_filter_nbr][0] = (EFEC_RX_FIFO0 << 29) | id1;
+
+    // Word 1: EFID2 (bits 28-0) + EFT_DUAL (bits 31-30)
+    hw_config.ext_filter[hw_config.ext_filter_nbr][1] = (EFT_DUAL << 30) | id2;
+
+    hw_config.ext_filter_nbr++;
     return CANFILTER_SUCCESS;
 }
 
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::emit_ext_range(uint32_t id1, uint32_t id2) {
-    if (hw_config.ext_count >= max_ext_filter)
+    if (hw_config.ext_filter_nbr >= max_ext_filter)
         return CANFILTER_ERROR_FULL;
 
     if (id1 > max_ext_id || id2 > max_ext_id || id1 > id2)
         return CANFILTER_ERROR_PARAM;
 
-    uint64_t efid1 = id1;
-    uint64_t efid2 = id2;
-    uint64_t efr = (EFEC_RX_FIFO0 << 61) | (efid1 << 32) | (EFT_RANGE << 30) | efid2;
-    hw_config.ext_filters[hw_config.ext_count++] = efr;
+    // Word 0: EFID1 (bits 28-0) + EFEC (bits 31-29)
+    hw_config.ext_filter[hw_config.ext_filter_nbr][0] = (EFEC_RX_FIFO0 << 29) | id1;
+
+    // Word 1: EFID2 (bits 28-0) + EFT_RANGE (bits 31-30)
+    hw_config.ext_filter[hw_config.ext_filter_nbr][1] = (EFT_RANGE << 30) | id2;
+
+    hw_config.ext_filter_nbr++;
     return CANFILTER_SUCCESS;
 }
 
@@ -116,8 +122,8 @@ canfilter_error_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::begi
     std_id_count = 0;
     ext_id_count = 0;
     // no filters written
-    hw_config.std_count = 0;
-    hw_config.ext_count = 0;
+    hw_config.std_filter_nbr = 0;
+    hw_config.ext_filter_nbr = 0;
     return CANFILTER_SUCCESS;
 }
 
@@ -212,13 +218,14 @@ size_t canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::get_hw_size() {
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print_reg() const {
     std::cout << std::endl << "fd-can registers:" << std::endl;
-    std::cout << "standard filters: " << hw_config.std_count << std::endl;
-    for (uint32_t i = 0; i < hw_config.std_count; ++i) {
-        std::cout << "sf[" << i << "]: " << FORMAT_HEX(hw_config.std_filters[i], 8) << std::endl;
+    std::cout << "standard filters: " << hw_config.std_filter_nbr << std::endl;
+    for (uint32_t i = 0; i < hw_config.std_filter_nbr; ++i) {
+        std::cout << "sf[" << i << "]: " << FORMAT_HEX(hw_config.std_filter[i], 8) << std::endl;
     }
-    std::cout << "extended filters: " << hw_config.ext_count << std::endl;
-    for (uint32_t i = 0; i < hw_config.ext_count; ++i) {
-        std::cout << "ef[" << i << "]: " << FORMAT_HEX(hw_config.ext_filters[i], 16) << std::endl;
+    std::cout << "extended filters: " << hw_config.ext_filter_nbr << std::endl;
+    for (uint32_t i = 0; i < hw_config.ext_filter_nbr; ++i) {
+        std::cout << "ef[" << i << "]: f0=" << FORMAT_HEX(hw_config.ext_filter[i][0], 8)
+                  << " f1=" << FORMAT_HEX(hw_config.ext_filter[i][1], 8) << std::endl;
     }
 }
 
@@ -228,19 +235,19 @@ void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print() con
     static const char *fec_str[8] = {"off", "fifo0", "fifo1", "reject", "prio", "prio fifo0", "prio fifo1", "not used"};
 
     std::cout << std::endl << "fdcan debug:" << std::endl;
-    for (uint32_t i = 0; i < hw_config.std_count; ++i) {
-        uint32_t sfid1 = (hw_config.std_filters[i] >> 16) & max_std_id;
-        uint32_t sfid2 = (hw_config.std_filters[i] & max_std_id);
-        uint32_t sfec = (hw_config.std_filters[i] >> 27) & 0x7;
-        uint32_t sft = (hw_config.std_filters[i] >> 30) & 0x3;
+    for (uint32_t i = 0; i < hw_config.std_filter_nbr; ++i) {
+        uint32_t sfid1 = (hw_config.std_filter[i] >> 16) & max_std_id;
+        uint32_t sfid2 = (hw_config.std_filter[i] & max_std_id);
+        uint32_t sfec = (hw_config.std_filter[i] >> 27) & 0x7;
+        uint32_t sft = (hw_config.std_filter[i] >> 30) & 0x3;
         std::cout << "sf[" << i << "]: " << ft_str[sft] << " " << FORMAT_HEX(sfid1, 3) << " " << FORMAT_HEX(sfid2, 3)
                   << " " << fec_str[sfec] << std::endl;
     }
-    for (uint32_t i = 0; i < hw_config.ext_count; ++i) {
-        uint32_t efid1 = (hw_config.ext_filters[i] >> 32) & max_ext_id;
-        uint32_t efid2 = (hw_config.ext_filters[i] & max_ext_id);
-        uint32_t efec = (hw_config.ext_filters[i] >> 61) & 0x7;
-        uint32_t eft = (hw_config.ext_filters[i] >> 30) & 0x3;
+    for (uint32_t i = 0; i < hw_config.ext_filter_nbr; ++i) {
+        uint32_t efid1 = hw_config.ext_filter[i][0] & max_ext_id;
+        uint32_t efid2 = hw_config.ext_filter[i][1] & max_ext_id;
+        uint32_t efec = (hw_config.ext_filter[i][0] >> 29) & 0x7;
+        uint32_t eft = (hw_config.ext_filter[i][1] >> 30) & 0x3;
         std::cout << "ef[" << i << "]: " << ft_str[eft] << " " << FORMAT_HEX(efid1, 8) << " " << FORMAT_HEX(efid2, 8)
                   << " " << fec_str[efec] << std::endl;
     }
@@ -248,12 +255,12 @@ void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::debug_print() con
 
 template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val>
 void canfilter_fdcan<max_std_filter, max_ext_filter, dev_val>::print_usage() const {
-    uint32_t std_percent = (hw_config.std_count * 100 + max_std_filter / 2) / max_std_filter;
-    uint32_t ext_percent = (hw_config.ext_count * 100 + max_ext_filter / 2) / max_ext_filter;
+    uint32_t std_percent = (hw_config.std_filter_nbr * 100 + max_std_filter / 2) / max_std_filter;
+    uint32_t ext_percent = (hw_config.ext_filter_nbr * 100 + max_ext_filter / 2) / max_ext_filter;
 
-    std::cout << "Filter usage: " << (int)hw_config.std_count << "/" << max_std_filter << " standard (" << std_percent
-              << "%), " << (int)hw_config.ext_count << "/" << max_ext_filter << " extended (" << ext_percent << "%)"
-              << std::endl;
+    std::cout << "Filter usage: " << (int)hw_config.std_filter_nbr << "/" << max_std_filter << " standard ("
+              << std_percent << "%), " << (int)hw_config.ext_filter_nbr << "/" << max_ext_filter << " extended ("
+              << ext_percent << "%)" << std::endl;
     return;
 }
 

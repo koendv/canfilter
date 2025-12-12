@@ -28,13 +28,13 @@ template <uint32_t max_std_filter, uint32_t max_ext_filter, uint32_t dev_val> cl
   public:
     // Hardware configuration struct (nested) with packed and aligned attributes
     struct hw_t {
-        uint8_t dev; // CANFILTER_DEV_BXCAN = 0
-        uint8_t std_count = 0;
-        uint8_t ext_count = 0;
+        uint8_t dev;                // CANFILTER_DEV_FDCAN_G0/CANFILTER_DEV_FDCAN_H7
+        uint8_t std_filter_nbr = 0; // number of standard filters
+        uint8_t ext_filter_nbr = 0; // number of extended filters
         uint8_t reserved[1];
 
-        uint32_t std_filters[max_std_filter]; // Fixed-size array for standard filters
-        uint64_t ext_filters[max_ext_filter]; // Fixed-size array for extended filters
+        uint32_t std_filter[max_std_filter];    // Fixed-size array for standard filters
+        uint32_t ext_filter[max_ext_filter][2]; // Fixed-size array for extended filters
 
         // Constructor initializes arrays to zero
         hw_t() {
