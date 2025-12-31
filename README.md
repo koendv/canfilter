@@ -26,7 +26,7 @@ RANGES: CAN ID ranges (0x100-0x1FF, 256-511, 0x1000-0x1FFF)
 | -o MODE             | --output MODE          | Set output mode: auto, bxcan_f0, bxcan_f4, fdcan_g0, fdcan_h7 |
 | -a                  | --allow-all            | Allow all packets                                             |
 | -v                  | --verbose              | Enable verbose output                                         |
-| -u VID@PID[@SERIAL] | --usb VID@PID[@SERIAL] | Vendor id, product id, and serial of usb adapter              |
+| -u VID:PID[@SERIAL] | --usb VID:PID[@SERIAL] | Vendor id, product id, and serial of usb adapter              |
 | -h                  | --help                 | Show this help                                                |
 
 - Single IDs are interpreted as standard if <= 0x7FF, extended if <= 0x1FFFFFFF.
@@ -178,6 +178,13 @@ A long-term solution would involve two improvements:
 ## Bugs
 
 [Bug report procedure](BUGS.md)
+
+## Links
+
+- candlelight [hardware filtering](https://github.com/candle-usb/candleLight_fw/pull/204) pull request
+- candlelight [binaries](https://github.com/koendv/candleLight_fw) for STM32F072 with hardware filtering
+- candlelight for [WeAct USB2CANFD V1](https://github.com/koendv/candleLight_fw_weact_usb2canfdv1) STM32G0B1 with hardware filtering
+- [cangaroo for linux](https://github.com/koendv/cangaroo) with hardware filtering
 
 ## License
 
